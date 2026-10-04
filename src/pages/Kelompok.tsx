@@ -4,6 +4,7 @@ import { ApiError } from '../types';
 import { api } from '../api';
 import { useI18n } from '../i18n';
 import { useLoad } from '../lib/useLoad';
+import { errorText } from '../lib/errors';
 import { fmtCoord, fmtNum, fmtSlot } from '../lib/format';
 import { T_AWAS, T_WATCH, WEIGHTS } from '../lib/maut';
 import { buildCaption } from '../lib/caption';
@@ -43,7 +44,7 @@ export function Kelompok() {
       <div className="wrap detail">
         <Link className="back" to="/"><IconArrowLeft />{t('cluster.back')}</Link>
         <p className="error" role="alert">
-          {notFound ? t('cluster.not_found') : t('load_error', { msg: error?.message ?? '' })}{' '}
+          {notFound ? t('cluster.not_found') : t('load_error', { msg: errorText(error, t) })}{' '}
           {!notFound && <button className="link-btn" onClick={reload}>{t('retry')}</button>}
         </p>
       </div>
@@ -114,7 +115,7 @@ export function Kelompok() {
                   {v.evidence.map((e, i) => (
                     <li key={i}>
                       <span className="lbl">{t(`ver.src.${e.source}`)}</span>
-                      <span>{e.finding}</span>
+                      <span>{lang === 'id' ? e.finding : e.finding_en}</span>
                       {e.observed_at && (
                         <span className="muted small">
                           {fmtSlot(e.observed_at, lang)}{e.age_h != null && ` · ${t('ver.age', { h: fmtNum(e.age_h, 1, lang) })}`}

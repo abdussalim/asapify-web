@@ -1,13 +1,14 @@
 import {
   AttributionControl, FullscreenControl, GeolocateControl, Map as MlMap, NavigationControl, ScaleControl, setWorkerUrl,
-  type LngLatBoundsLike, type LngLatLike,
+  type ControlPosition, type IControl, type LngLatBoundsLike, type LngLatLike,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Basemap, ProvinceCode, Status } from '../types';
+import type { Lang } from '../i18n';
 import { REGION } from '../lib/provinces';
 import {
-  EMPTY, LAYER_KEYS, applyFilters, applyVisibility, installLayers, selectionShape, setStatusPaint, shapes, styleFor, updateSource,
-  type BasemapId, type LayerKey, type MapData,
+  EMPTY, LAYER_KEYS, applyFilters, applyVisibility, installLayers, localizeBasemap, selectionShape, setStatusPaint, shapes, styleFor,
+  updateProvinceFocus, updateSource, type BasemapId, type LayerKey, type MapData,
 } from './layers';
 
 // MapLibre 6 mencari worker di sebelah file modulnya; setelah dibundel Vite file itu tidak ada.
@@ -17,6 +18,7 @@ setWorkerUrl(`${import.meta.env.BASE_URL}maplibre/maplibre-gl-worker.mjs`);
 export interface MapOptions {
   dark: boolean;
   lite: boolean;
+  lang: Lang;
   basemap: BasemapId;
   basemaps: Basemap[];
   onCell(cell: number, at: LngLatLike): void; // -1 = klik di luar piksel gambut
@@ -24,11 +26,38 @@ export interface MapOptions {
 
 const ALL: Status[] = ['SAFE', 'NO_OBSERVATION', 'WATCH', 'AWAS'];
 
+// Tooltip dan label aria tombol bawaan MapLibre mengikuti bahasa UI (bawaannya Inggris).
+const UI: Record<Lang, Record<string, string>> = {
+  id: {
+    'AttributionControl.ToggleAttribution': 'Tampilkan atribusi',
+    'FullscreenControl.Enter': 'Layar penuh',
+    'FullscreenControl.Exit': 'Keluar dari layar penuh',
+    'GeolocateControl.FindMyLocation': 'Cari lokasi saya',
+    'GeolocateControl.LocationNotAvailable': 'Lokasi tidak tersedia',
+    'NavigationControl.ZoomIn': 'Perbesar',
+    'NavigationControl.ZoomOut': 'Perkecil',
+    'Map.Title': 'Peta',
+    'Popup.Close': 'Tutup',
+  },
+  en: {
+    'AttributionControl.ToggleAttribution': 'Toggle attribution',
+    'FullscreenControl.Enter': 'Enter fullscreen',
+    'FullscreenControl.Exit': 'Exit fullscreen',
+    'GeolocateControl.FindMyLocation': 'Find my location',
+    'GeolocateControl.LocationNotAvailable': 'Location not available',
+    'NavigationControl.ZoomIn': 'Zoom in',
+    'NavigationControl.ZoomOut': 'Zoom out',
+    'Map.Title': 'Map',
+    'Popup.Close': 'Close',
+  },
+};
+
 /** Pembungkus MapLibre yang menyimpan seluruh state agar bisa dipasang ulang setelah setStyle. */
 export class MapController {
   readonly map: MlMap;
   private dark: boolean;
   private lite: boolean;
+  private lang: Lang;
   private basemap: BasemapId;
   private basemaps: Basemap[];
   private data: MapData = EMPTY;
@@ -40,10 +69,12 @@ export class MapController {
   private selectedCluster: string | null = null;
   private selectedCell = -1;
   private ready = false;
+  private controls: IControl[] = [];
 
   constructor(container: HTMLElement, o: MapOptions) {
     this.dark = o.dark;
     this.lite = o.lite;
+    this.lang = o.lang;
     this.basemap = o.basemap;
     this.basemaps = o.basemaps;
     this.map = new MlMap({
@@ -61,18 +92,16 @@ export class MapController {
       touchPitch: false,
       maxPitch: 0,
       validateStyle: false,
+      locale: UI[o.lang],
     });
     this.map.touchZoomRotate.disableRotation();
     this.map.keyboard.disableRotation();
-    this.map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-    this.map.addControl(new GeolocateControl({ positionOptions: { enableHighAccuracy: false, timeout: 10_000 }, fitBoundsOptions: { maxZoom: 11 } }), 'top-right');
-    this.map.addControl(new FullscreenControl(), 'top-right');
-    this.map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
-    this.map.addControl(new AttributionControl({ compact: true, customAttribution: '© OpenStreetMap contributors · geoBoundaries' }), 'bottom-right');
+    this.mountControls();
 
     this.map.on('style.load', () => {
       const satellite = this.basemaps.some((b) => b.id === this.basemap);
-      installLayers(this.map, { dark: this.dark, satellite, statuses: this.statuses }, this.data, this.selectedCell);
+      installLayers(this.map, { dark: this.dark, satellite, statuses: this.statuses }, this.data, this.selectedCell, this.province, this.lang);
+      localizeBasemap(this.map, this.lang);
       applyVisibility(this.map, this.vis, this.lite);
       applyFilters(this.map, this.province, this.selectedCluster);
       this.ready = true;
@@ -108,7 +137,8 @@ export class MapController {
     if (patch.peat) updateSource(this.map, 'peat', d.peat);
     if (patch.provinces) {
       updateSource(this.map, 'provinces', d.provinces);
-      updateSource(this.map, 'province-labels', shapes.provinceLabels(d.provinces));
+      updateSource(this.map, 'province-labels', shapes.provinceLabels(d.provinces, this.lang));
+      updateProvinceFocus(this.map, d.provinces, this.province, this.lang);
     }
     if (patch.viirs) updateSource(this.map, 'viirs', shapes.viirsPoints(d.viirs));
     this.flushStatus();
@@ -141,7 +171,35 @@ export class MapController {
 
   setProvince(province: ProvinceCode | '') {
     this.province = province;
-    if (this.ready) applyFilters(this.map, province, this.selectedCluster);
+    if (!this.ready) return;
+    applyFilters(this.map, province, this.selectedCluster);
+    updateProvinceFocus(this.map, this.data.provinces, province, this.lang);
+  }
+
+  /** Kontrol membaca teks lokal saat dipasang, jadi ganti bahasa = pasang ulang. */
+  private mountControls() {
+    for (const c of this.controls) this.map.removeControl(c);
+    const add: [IControl, ControlPosition][] = [
+      [new NavigationControl({ showCompass: false }), 'top-right'],
+      [new GeolocateControl({ positionOptions: { enableHighAccuracy: false, timeout: 10_000 }, fitBoundsOptions: { maxZoom: 11 } }), 'top-right'],
+      [new FullscreenControl(), 'top-right'],
+      [new ScaleControl({ unit: 'metric' }), 'bottom-left'],
+      [new AttributionControl({ compact: true, customAttribution: '© OpenStreetMap contributors · geoBoundaries' }), 'bottom-right'],
+    ];
+    for (const [c, pos] of add) this.map.addControl(c, pos);
+    this.controls = add.map(([c]) => c);
+  }
+
+  setLang(lang: Lang) {
+    if (lang === this.lang) return;
+    this.lang = lang;
+    this.map._locale = { ...this.map._locale, ...UI[lang] };
+    this.map.getCanvas().setAttribute('aria-label', UI[lang]['Map.Title']);
+    this.mountControls();
+    if (!this.ready) return;
+    localizeBasemap(this.map, lang);
+    updateSource(this.map, 'province-labels', shapes.provinceLabels(this.data.provinces, lang));
+    updateProvinceFocus(this.map, this.data.provinces, this.province, lang);
   }
 
   setSelectedCluster(id: string | null) {

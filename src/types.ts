@@ -23,6 +23,7 @@ export interface Meta {
   replay: boolean;
   n_sat: 0 | 1 | 2;
   sats: { himawari: SatState; gk2a: SatState };
+  nights: { first: string; last: string }; // FE: malam arsip, YYYY-MM-DD (tanggal WIB awal malam)
 }
 
 export interface PixelProps {
@@ -85,7 +86,8 @@ export interface Neighbour {
 export type EvidenceSource = 'rule_engine' | 'viirs_firms' | 'viirs_image' | 'himawari_image';
 export interface Evidence {
   source: EvidenceSource;
-  finding: string;
+  finding: string; // Bahasa Indonesia
+  finding_en: string; // FE
   observed_at: string | null;
   age_h: number | null;
 }
@@ -170,6 +172,7 @@ export interface NightCompact {
   slots: string[]; // 54 slot UTC, 13.00–21.50
   status: (string | null)[]; // per slot; null = belum dievaluasi / tidak ada data
   n_sat: (0 | 1 | 2 | null)[];
+  clusters: Record<string, number[]>; // kelompok yang AWAS malam itu → indeks sel
 }
 
 export interface Basemap {
@@ -190,7 +193,7 @@ export interface Api {
   gridCompact(asOf?: string): Promise<GridCompact>;
   night(night: string): Promise<NightCompact>;
   basemaps(): Promise<Basemap[]>;
-  clusters(): Promise<ClusterSummary[]>;
+  clusters(night?: string): Promise<ClusterSummary[]>; // tanpa night = kelompok aktif
   cluster(id: string): Promise<ClusterDetail>;
   decide(id: string, body: DecisionRequest): Promise<void>;
   peatBoundary(): Promise<PeatBoundary>;

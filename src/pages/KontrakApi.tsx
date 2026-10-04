@@ -114,7 +114,7 @@ function EndpointCard({ ep, examples }: { ep: Endpoint; examples: Record<string,
       {ep.body && (
         <>
           <h4>{t('api.body')} · <a href={`#sc-${ep.body.schema}`}>{ep.body.schema}</a></h4>
-          <JsonBlock value={ex(ep.body.example)} label={`${t('api.example')} · request`} />
+          <JsonBlock value={ex(ep.body.example)} label={`${t('api.example')} · ${t('api.request')}`} />
         </>
       )}
 
@@ -124,7 +124,7 @@ function EndpointCard({ ep, examples }: { ep: Endpoint; examples: Record<string,
           <p>
             <span className={`code c${String(r.code)[0]}`}>{r.code}</span>{' '}
             <a href={`#sc-${r.schema}`}>{r.schema}</a>
-            {r.note && <span className="muted"> — {rich(L(r.note))}</span>}
+            {r.note && <span className="muted"> · {rich(L(r.note))}</span>}
           </p>
           {r.example && <JsonBlock value={ex(r.example)} label={`${t('api.example')} · ${r.code}`} />}
         </div>
@@ -168,7 +168,6 @@ export function KontrakApi() {
   return (
     <div className="wrap contract">
       <header className="contract-head">
-        <span className="eyebrow">{t('api.eyebrow')}</span>
         <h1>{t('api.title')}</h1>
         <p className="lede">{t('api.lede')}</p>
         <div className="legend-tags">
@@ -236,7 +235,7 @@ export function KontrakApi() {
             <p className="muted">{t('api.internal_note')}</p>
             <ul className="internal">
               {INTERNAL.map((i) => (
-                <li key={i.path}><span className="m m-post">{i.method}</span> <code>{i.path}</code> — {i.desc[lang]}</li>
+                <li key={i.path}><span className="m m-post">{i.method}</span> <code>{i.path}</code> · {i.desc[lang]}</li>
               ))}
             </ul>
           </section>

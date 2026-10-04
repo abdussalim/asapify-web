@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useI18n } from '../i18n';
 import { fmtNum, fmtSlot } from '../lib/format';
 import { CAPTION_MAX } from '../lib/caption';
+import { errorText } from '../lib/errors';
 import { IconCheck, IconClock, IconSend, IconX } from './icons';
 
 /** Label keputusan: teks + ikon, tanpa warna level. */
@@ -65,7 +66,7 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
       });
       onDecided();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
+      setError(errorText(e, t));
       if (e instanceof ApiError && e.code === 'ALREADY_DECIDED') onDecided();
     } finally {
       setBusy(false);
@@ -78,7 +79,7 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
       <div className="dec-summary">
         <span className="lbl">{t('dec.summary')}</span>
         <p>
-          AWAS · U {fmtNum(cluster.utility_score, 2, lang)} · {Math.round(cluster.neighbour_support * 8)}/8 ·{' '}
+          AWAS · U {fmtNum(cluster.utility_score, 2, lang)} · {t('map.nbr', { k: Math.round(cluster.neighbour_support * 8) })} ·{' '}
           {cluster.n_sat >= 2 ? t('sat.agree') : t('sat.single')} ·{' '}
           {v ? t(v.result === 'strong_evidence' ? 'evidence.strong' : 'evidence.inconclusive') : t('evidence.none')}
         </p>

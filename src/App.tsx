@@ -37,7 +37,7 @@ function TopBar({ theme }: { theme: ReturnType<typeof useTheme> }) {
         {API_MODE === 'mock' && (
           <span className="mock-badge" title={t('mock.title', { sc: currentScenario() })}>{t('mock.badge')}</span>
         )}
-        <nav className="navlinks" aria-label="Navigasi">
+        <nav className="navlinks" aria-label={t('nav.label')}>
           {user && <NavLink to="/" end>{t('nav.map')}</NavLink>}
           <NavLink to="/tentang">{t('nav.about')}</NavLink>
           <NavLink to="/kontrak-api">

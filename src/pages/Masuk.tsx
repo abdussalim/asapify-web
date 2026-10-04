@@ -32,8 +32,8 @@ export function Masuk() {
         <button className="btn primary wide" onClick={() => { signIn(); nav(from, { replace: true }); }}>
           {t('login.btn')}
         </button>
-        <p className="callout info small">{t('login.note')}</p>
-        <Link to="/tentang">{t('login.about')} →</Link>
+        <p className="muted small">{t('login.note')}</p>
+        <Link to="/tentang">{t('login.about')}</Link>
       </div>
     </div>
   );

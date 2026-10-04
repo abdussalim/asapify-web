@@ -4,19 +4,20 @@ import { ATTR_ORDER, WEIGHTS } from '../lib/maut';
 import { StatusBadge } from '../components/StatusBadge';
 import type { Status } from '../types';
 
-const STEPS = [1, 2, 3, 4, 5];
+// Langkah 1–3 dijalankan aturan, 4 oleh agen AI, 5 oleh manusia; warna garis atas mengikuti pelakunya.
+const STEPS: [number, 'rule' | 'ai' | 'human'][] = [[1, 'rule'], [2, 'rule'], [3, 'rule'], [4, 'ai'], [5, 'human']];
 const STATUS_ROWS: [Status, string][] = [
   ['AWAS', 'about.st_awas'], ['WATCH', 'about.st_watch'], ['NO_OBSERVATION', 'about.st_noobs'], ['SAFE', 'about.st_safe'],
 ];
 const SOURCES: [string, string][] = [
-  ['Himawari-9 AHI', 'NOAA open data · B07 + B14 · 10 min'],
-  ['GEO-KOMPSAT-2A AMI', 'NOAA open data · SW038 + IR105 · 10 min'],
-  ['NASA POWER hourly', 'TS + T2M baseline · 0,5° × 0,625°'],
-  ['NASA FIRMS VIIRS', 'S-NPP, NOAA-20, NOAA-21 · 375 m · on demand'],
-  ['NASA GIBS', 'VIIRS true colour · ~250 m'],
-  ['Peta Indikatif KHG', 'Dit. PKG KLHK · REST BIG'],
-  ['ESA WorldCover v200', 'built-up mask'],
-  ['geoBoundaries IDN ADM1', 'batas provinsi / provinces'],
+  ['Himawari-9 AHI', 'about.src_h'],
+  ['GEO-KOMPSAT-2A AMI', 'about.src_g'],
+  ['NASA POWER', 'about.src_power'],
+  ['NASA FIRMS VIIRS', 'about.src_firms'],
+  ['NASA GIBS', 'about.src_gibs'],
+  ['Peta Indikatif KHG', 'about.src_khg'],
+  ['ESA WorldCover v200', 'about.src_wc'],
+  ['geoBoundaries IDN ADM1', 'about.src_gb'],
 ];
 
 export function Tentang() {
@@ -24,32 +25,24 @@ export function Tentang() {
   return (
     <div className="wrap about">
       <header className="about-head">
-        <div className="dict" aria-label={`asap: ${t('about.dict_en')}`}>
-          <p className="dict-word">asap <span className="dict-pron">{t('about.dict_pron')}</span> <i>{t('about.dict_pos')}</i></p>
-          <p className="dict-def">{t('about.dict_def')} <span className="dict-en">EN: {t('about.dict_en')}</span></p>
-        </div>
-        <span className="eyebrow">{t('about.eyebrow')}</span>
         <h1>{t('about.title')}</h1>
         <p className="lede">{t('about.lede')}</p>
-        <p className="tagline">“{t('about.tagline')}”</p>
+        <p>{t('about.scope')}</p>
+        <p className="muted small">{t('about.name')}</p>
       </header>
 
       <section aria-labelledby="how-h">
         <h2 id="how-h">{t('about.how_title')}</h2>
         <ol className="steps">
-          {STEPS.map((n) => (
-            <li key={n} className={`step s${n}`}>
+          {STEPS.map(([n, who]) => (
+            <li key={n} className={`step by-${who}`}>
               <span className="num">{n}</span>
               <h3>{t(`about.step${n}_t`)}</h3>
               <p>{t(`about.step${n}_d`)}</p>
             </li>
           ))}
         </ol>
-      </section>
-
-      <section className="ai-callout" aria-labelledby="ai-h">
-        <h2 id="ai-h">{t('about.ai_title')}</h2>
-        <p>{t('about.ai_body')}</p>
+        <p className="rule-line">{t('about.ai_rule')}</p>
       </section>
 
       <div className="grid-2">
@@ -73,6 +66,7 @@ export function Tentang() {
               <div key={s}><dt><StatusBadge status={s} /></dt><dd>{t(k)}</dd></div>
             ))}
           </dl>
+          {lang === 'en' && <p className="muted small">{t('about.awas_word')}</p>}
           <p className="muted small">{t('awas.note')}</p>
         </section>
       </div>
@@ -95,9 +89,9 @@ export function Tentang() {
       <section className="card" aria-labelledby="data-h">
         <h2 id="data-h">{t('about.data_title')}</h2>
         <dl className="kv">
-          {SOURCES.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          {SOURCES.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{t(v)}</dd></div>)}
         </dl>
-        <p className="callout info small">{t('about.data_note')}</p>
+        <p className="muted small">{t('about.data_note')}</p>
       </section>
     </div>
   );

@@ -6,13 +6,15 @@ import {
   type VerificationDetail,
 } from '../types';
 import { T_AWAS, T_WATCH, utility } from '../lib/maut';
-import { SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
+import { NIGHT_SLOTS, SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
 import { currentScenario, type Scenario } from './scenario';
 
 // Data FIKTIF untuk demo tanpa backend: replay 24 Sep 2023 di gambut Sumatra + Kalimantan
 // (15 provinsi; Kalteng = BACKTEST_BBOX 113.5,-2.6,114.3,-1.9). Bentuk mengikuti backend.html + usulan FE.
+// Arsip malam 1–24 Sep 2023 bisa dibuka lewat pemilih malam.
 
 const AS_OF = '2023-09-24T15:10:00Z'; // 22.10 WIB
+const ARCHIVE_FIRST = '2023-09-01'; // awal jendela backtest
 const STEP = 0.02;
 const ORIGIN: LngLat = [94.9, 6.2]; // grid gabungan Sumatra + Kalimantan
 
@@ -107,7 +109,7 @@ function himawariSvg(strength: number): string {
 <ellipse cx='60' cy='52' rx='70' ry='28' fill='#cfd5da' opacity='.35'/>
 <ellipse cx='210' cy='200' rx='60' ry='22' fill='#cfd5da' opacity='.25'/>
 <circle cx='128' cy='128' r='${r.toFixed(0)}' fill='url(#h)' opacity='${(0.5 + strength / 2).toFixed(2)}'/>
-<text x='8' y='246' font-family='monospace' font-size='11' fill='#9aa4ad'>Himawari-9 B07 · ilustrasi mock</text></svg>`;
+<text x='8' y='246' font-family='monospace' font-size='11' fill='#9aa4ad'>Himawari-9 B07 · mock</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
@@ -115,10 +117,12 @@ function himawariSvg(strength: number): string {
 
 interface Night { date: string; from: number; to: number; end?: number; peakAt?: number; clouds?: [number, number][] }
 
+const SERIES_END = 47; // deret detail berhenti di 03.50 WIB (lihat UtilityChart)
+
 function buildSeries(nights: Night[], seed: number): SeriesPoint[] {
   const out: SeriesPoint[] = [];
   nights.forEach((n, ni) => {
-    const end = n.end ?? 47;
+    const end = n.end ?? SERIES_END;
     const peak = n.peakAt ?? end;
     const t0 = Date.parse(`${n.date}T13:00:00Z`); // 20.00 WIB
     for (let i = 0; i <= end; i++) {
@@ -139,6 +143,7 @@ function buildSeries(nights: Night[], seed: number): SeriesPoint[] {
 
 interface ClusterDef {
   id: string;
+  state?: 'closed'; // default aktif
   province: ProvinceCode;
   pixels: LngLat[];
   attrs: Attributes;
@@ -161,6 +166,8 @@ const C001: LngLat[] = [[114.13, -2.45], [114.15, -2.45], [114.13, -2.47]];
 const C923: LngLat[] = [[113.67, -2.05], [113.69, -2.05], [113.71, -2.05], [113.67, -2.07], [113.69, -2.07], [113.69, -2.03]];
 const C003: LngLat[] = [[105.61, -3.35], [105.63, -3.35], [105.65, -3.35], [105.61, -3.37], [105.63, -3.37]]; // OKI, Sumsel
 const C004: LngLat[] = [[102.75, 0.35], [102.77, 0.35], [102.75, 0.33]]; // Kampar, Riau
+const C915: LngLat[] = [[109.55, -0.35], [109.57, -0.35], [109.55, -0.37], [109.57, -0.33]]; // Kubu Raya, Kalbar (arsip)
+const T915 = '2023-09-15T16:30:00Z';
 
 const DEFS: ClusterDef[] = [
   {
@@ -178,10 +185,10 @@ const DEFS: ClusterDef[] = [
     verification: {
       result: 'strong_evidence', smoke_visible: true, viirs_within_2km_48h: 1, tool_calls: 5, at: '2023-09-24T15:14:00Z',
       evidence: [
-        { source: 'rule_engine', finding: 'U 0,73; 3/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: AS_OF, age_h: 0 },
-        { source: 'viirs_firms', finding: '1 deteksi VIIRS NOAA-20 pada 1,4 km (confidence nominal)', observed_at: '2023-09-23T18:42:00Z', age_h: 20.5 },
-        { source: 'viirs_image', finding: 'Asap tipis mengarah ke barat laut, berasal ≤ 5 km dari penanda', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
-        { source: 'himawari_image', finding: 'Titik terang B07 tepat di penanda', observed_at: AS_OF, age_h: 0 },
+        { source: 'rule_engine', finding: 'U 0,73; 3/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', finding_en: 'U 0.73; 3/8 neighbours U0 ≥ 0.5; Himawari + GK2A agree', observed_at: AS_OF, age_h: 0 },
+        { source: 'viirs_firms', finding: '1 deteksi VIIRS NOAA-20 pada 1,4 km (keyakinan nominal)', finding_en: '1 NOAA-20 VIIRS detection at 1.4 km (nominal confidence)', observed_at: '2023-09-23T18:42:00Z', age_h: 20.5 },
+        { source: 'viirs_image', finding: 'Asap tipis mengarah ke barat laut, berasal ≤ 5 km dari penanda', finding_en: 'Thin smoke drifting north-west, starting ≤ 5 km from the marker', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
+        { source: 'himawari_image', finding: 'Titik terang B07 tepat di penanda', finding_en: 'Bright B07 spot on the marker', observed_at: AS_OF, age_h: 0 },
       ],
       summary_id: 'Bukti kuat. Asap tipis terlihat di citra VIIRS NOAA-20 24 Sep, berasal ≤ 5 km dari koordinat, dan ada 1 deteksi VIIRS pada 1,4 km dalam 48 jam.',
       summary_en: 'Strong evidence. Thin smoke is visible in the NOAA-20 VIIRS image of 24 Sep, originating within 5 km of the coordinate, and 1 VIIRS detection lies 1.4 km away within 48 hours.',
@@ -216,10 +223,10 @@ const DEFS: ClusterDef[] = [
     verification: {
       result: 'inconclusive', smoke_visible: false, viirs_within_2km_48h: 0, tool_calls: 5, at: '2023-09-24T15:15:00Z',
       evidence: [
-        { source: 'rule_engine', finding: 'U 0,71; 2/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: AS_OF, age_h: 0 },
-        { source: 'viirs_firms', finding: 'Tidak ada deteksi VIIRS dalam radius 10 km, 48 jam', observed_at: null, age_h: null },
-        { source: 'viirs_image', finding: 'Area tertutup awan tipis; asap tidak terlihat', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
-        { source: 'himawari_image', finding: 'Titik hangat lemah di penanda', observed_at: AS_OF, age_h: 0 },
+        { source: 'rule_engine', finding: 'U 0,71; 2/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', finding_en: 'U 0.71; 2/8 neighbours U0 ≥ 0.5; Himawari + GK2A agree', observed_at: AS_OF, age_h: 0 },
+        { source: 'viirs_firms', finding: 'Tidak ada deteksi VIIRS dalam radius 10 km, 48 jam', finding_en: 'No VIIRS detection within 10 km in 48 h', observed_at: null, age_h: null },
+        { source: 'viirs_image', finding: 'Area tertutup awan tipis; asap tidak terlihat', finding_en: 'Thin cloud over the area; no smoke visible', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
+        { source: 'himawari_image', finding: 'Titik hangat lemah di penanda', finding_en: 'Faint warm spot on the marker', observed_at: AS_OF, age_h: 0 },
       ],
       summary_id: 'Inkonklusif. Tidak ada deteksi VIIRS dalam 10 km selama 48 jam dan citra VIIRS 24 Sep tertutup awan tipis. Tidak terlihatnya asap bukan bukti negatif.',
       summary_en: 'Inconclusive. No VIIRS detection within 10 km in 48 hours and the 24 Sep VIIRS image is covered by thin cloud. Absence of visible smoke is not negative evidence.',
@@ -251,10 +258,10 @@ const DEFS: ClusterDef[] = [
     verification: {
       result: 'strong_evidence', smoke_visible: true, viirs_within_2km_48h: 2, tool_calls: 5, at: '2023-09-23T16:44:00Z',
       evidence: [
-        { source: 'rule_engine', finding: 'U 0,86; 4/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: '2023-09-23T16:40:00Z', age_h: 0 },
-        { source: 'viirs_firms', finding: '2 deteksi VIIRS ≤ 2 km (NOAA-20 0,9 km; S-NPP 1,6 km)', observed_at: '2023-09-23T06:12:00Z', age_h: 10.5 },
-        { source: 'viirs_image', finding: 'Kepulan asap jelas berasal dari dekat penanda, mengarah ke barat', observed_at: '2023-09-23T06:30:00Z', age_h: 10.2 },
-        { source: 'himawari_image', finding: 'Titik terang B07 di penanda', observed_at: '2023-09-23T16:40:00Z', age_h: 0 },
+        { source: 'rule_engine', finding: 'U 0,86; 4/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', finding_en: 'U 0.86; 4/8 neighbours U0 ≥ 0.5; Himawari + GK2A agree', observed_at: '2023-09-23T16:40:00Z', age_h: 0 },
+        { source: 'viirs_firms', finding: '2 deteksi VIIRS ≤ 2 km (NOAA-20 0,9 km; S-NPP 1,6 km)', finding_en: '2 VIIRS detections ≤ 2 km (NOAA-20 0.9 km; S-NPP 1.6 km)', observed_at: '2023-09-23T06:12:00Z', age_h: 10.5 },
+        { source: 'viirs_image', finding: 'Kepulan asap berasal dari dekat penanda, mengarah ke barat', finding_en: 'Smoke plume starting near the marker, heading west', observed_at: '2023-09-23T06:30:00Z', age_h: 10.2 },
+        { source: 'himawari_image', finding: 'Titik terang B07 di penanda', finding_en: 'Bright B07 spot on the marker', observed_at: '2023-09-23T16:40:00Z', age_h: 0 },
       ],
       summary_id: 'Bukti kuat. Ada 2 deteksi VIIRS ≤ 2 km dalam 48 jam dan kepulan asap terlihat di citra VIIRS 23 Sep.',
       summary_en: 'Strong evidence. There are 2 VIIRS detections within 2 km in 48 hours and a smoke plume is visible in the 23 Sep VIIRS image.',
@@ -282,17 +289,17 @@ const DEFS: ClusterDef[] = [
     neighbours: ['anomaly', 'anomaly', 'normal', 'normal', 'anomaly', 'normal', 'anomaly', 'normal'],
     trigger: AS_OF,
     nights: [
-      { date: '2023-09-22', from: 0.35, to: 0.58, clouds: [[44, 47]] },
-      { date: '2023-09-23', from: 0.55, to: 0.78, peakAt: 30 },
-      { date: '2023-09-24', from: 0.7, to: 0.83, end: 13 },
+      { date: '2023-09-22', from: 0.3, to: 0.45, clouds: [[44, 47]] },
+      { date: '2023-09-23', from: 0.45, to: 0.62, peakAt: 30 }, // Pantau; AWAS baru 24 Sep
+      { date: '2023-09-24', from: 0.6, to: 0.83, end: 13 },
     ],
     verification: {
       result: 'strong_evidence', smoke_visible: true, viirs_within_2km_48h: 3, tool_calls: 5, at: '2023-09-24T15:16:00Z',
       evidence: [
-        { source: 'rule_engine', finding: 'U 0,83; 4/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: AS_OF, age_h: 0 },
-        { source: 'viirs_firms', finding: '3 deteksi VIIRS ≤ 2 km (NOAA-20, S-NPP, NOAA-21) dalam 48 jam', observed_at: '2023-09-24T06:20:00Z', age_h: 8.8 },
-        { source: 'viirs_image', finding: 'Asap tebal menyebar ke barat laut dari sekitar penanda', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
-        { source: 'himawari_image', finding: 'Titik terang B07 meluas di penanda', observed_at: AS_OF, age_h: 0 },
+        { source: 'rule_engine', finding: 'U 0,83; 4/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', finding_en: 'U 0.83; 4/8 neighbours U0 ≥ 0.5; Himawari + GK2A agree', observed_at: AS_OF, age_h: 0 },
+        { source: 'viirs_firms', finding: '3 deteksi VIIRS ≤ 2 km (NOAA-20, S-NPP, NOAA-21) dalam 48 jam', finding_en: '3 VIIRS detections ≤ 2 km (NOAA-20, S-NPP, NOAA-21) in 48 h', observed_at: '2023-09-24T06:20:00Z', age_h: 8.8 },
+        { source: 'viirs_image', finding: 'Asap tebal menyebar ke barat laut dari sekitar penanda', finding_en: 'Thick smoke spreading north-west from around the marker', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
+        { source: 'himawari_image', finding: 'Titik terang B07 meluas di penanda', finding_en: 'Wide bright B07 spot on the marker', observed_at: AS_OF, age_h: 0 },
       ],
       summary_id: 'Bukti kuat. Ada 3 deteksi VIIRS ≤ 2 km dalam 48 jam dan asap tebal terlihat di citra VIIRS 24 Sep, menyebar ke barat laut.',
       summary_en: 'Strong evidence. There are 3 VIIRS detections within 2 km in 48 hours and thick smoke is visible in the 24 Sep VIIRS image, spreading north-west.',
@@ -328,10 +335,10 @@ const DEFS: ClusterDef[] = [
     verification: {
       result: 'inconclusive', smoke_visible: null, viirs_within_2km_48h: 0, tool_calls: 5, at: '2023-09-24T15:17:00Z',
       evidence: [
-        { source: 'rule_engine', finding: 'U 0,69; 2/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: AS_OF, age_h: 0 },
-        { source: 'viirs_firms', finding: '1 deteksi VIIRS pada 6,3 km; tidak ada yang ≤ 2 km dalam 48 jam', observed_at: '2023-09-24T06:10:00Z', age_h: 9 },
-        { source: 'viirs_image', finding: 'Tertutup awan tebal; asap tidak bisa dinilai', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
-        { source: 'himawari_image', finding: 'Titik hangat di penanda, sebagian tertutup awan', observed_at: AS_OF, age_h: 0 },
+        { source: 'rule_engine', finding: 'U 0,69; 2/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', finding_en: 'U 0.69; 2/8 neighbours U0 ≥ 0.5; Himawari + GK2A agree', observed_at: AS_OF, age_h: 0 },
+        { source: 'viirs_firms', finding: '1 deteksi VIIRS pada 6,3 km; tidak ada yang ≤ 2 km dalam 48 jam', finding_en: '1 VIIRS detection at 6.3 km; none ≤ 2 km in 48 h', observed_at: '2023-09-24T06:10:00Z', age_h: 9 },
+        { source: 'viirs_image', finding: 'Tertutup awan tebal; asap tidak bisa dinilai', finding_en: 'Thick cloud; smoke cannot be assessed', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
+        { source: 'himawari_image', finding: 'Titik hangat di penanda, sebagian tertutup awan', finding_en: 'Warm spot on the marker, partly under cloud', observed_at: AS_OF, age_h: 0 },
       ],
       summary_id: 'Inkonklusif. Deteksi VIIRS terdekat 6,3 km dan citra VIIRS 24 Sep tertutup awan tebal sehingga asap tidak bisa dinilai.',
       summary_en: 'Inconclusive. The nearest VIIRS detection is 6.3 km away and the 24 Sep VIIRS image is under thick cloud, so smoke cannot be assessed.',
@@ -350,9 +357,53 @@ const DEFS: ClusterDef[] = [
       ],
     },
   },
+  {
+    id: 'C-0915-001',
+    state: 'closed',
+    province: '61',
+    pixels: C915,
+    attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.7, u_SAT: 0.4, u_T: 0.67 }, // U = 0,74 dengan u_N 2/8
+    neighbours: ['normal', 'anomaly', 'normal', 'anomaly', 'normal', 'non_peat', 'normal', 'normal'],
+    trigger: T915,
+    nights: [
+      { date: '2023-09-13', from: 0.18, to: 0.34 },
+      { date: '2023-09-14', from: 0.3, to: 0.52, clouds: [[12, 20]] },
+      { date: '2023-09-15', from: 0.48, to: 0.74, peakAt: 21 },
+    ],
+    verification: {
+      result: 'inconclusive', smoke_visible: null, viirs_within_2km_48h: 0, tool_calls: 5, at: '2023-09-15T16:34:00Z',
+      evidence: [
+        { source: 'rule_engine', finding: 'U 0,74; 2/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', finding_en: 'U 0.74; 2/8 neighbours U0 ≥ 0.5; Himawari + GK2A agree', observed_at: T915, age_h: 0 },
+        { source: 'viirs_firms', finding: '1 deteksi VIIRS pada 4,8 km; tidak ada yang ≤ 2 km dalam 48 jam', finding_en: '1 VIIRS detection at 4.8 km; none ≤ 2 km in 48 h', observed_at: '2023-09-15T06:05:00Z', age_h: 10.4 },
+        { source: 'viirs_image', finding: 'Kabut asap regional menutupi area; sumber asap tidak bisa ditentukan', finding_en: 'Regional haze over the area; the smoke source cannot be located', observed_at: '2023-09-15T06:30:00Z', age_h: 10 },
+        { source: 'himawari_image', finding: 'Titik hangat di penanda', finding_en: 'Warm spot on the marker', observed_at: T915, age_h: 0 },
+      ],
+      summary_id: 'Inkonklusif. Deteksi VIIRS terdekat 4,8 km dan kabut asap regional di citra VIIRS 15 Sep menutupi sumber asap.',
+      summary_en: 'Inconclusive. The nearest VIIRS detection is 4.8 km away and regional haze in the 15 Sep VIIRS image hides the smoke source.',
+      tool_trace: [
+        ...firstCalls(C915[0], T915, 2240),
+        { tool: 'fetch_viirs_image', args: { lat: -0.35, lon: 109.56, as_of: T915 }, duration_ms: 3290, ok: true },
+        { tool: 'fetch_himawari_image', args: { lat: -0.35, lon: 109.56, as_of: T915, mode: 'thermal' }, duration_ms: 2710, ok: true },
+        { tool: 'save_verification', args: { result: 'inconclusive', viirs_within_2km_48h: 0 }, duration_ms: 90, ok: true },
+      ],
+      images: [
+        { source: 'viirs_image', url: gibsUrl([109.56, -0.35], '2023-09-15'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-15T06:30:00Z', age_h: 10, marker_drawn: false },
+        { source: 'himawari_image', url: himawariSvg(0.5), layer: 'Himawari-9 B07', observed_at: T915, age_h: 0, marker_drawn: false },
+      ],
+      viirs: [
+        { src: 'VIIRS_NOAA20_SP', time_utc: '2023-09-15T06:05:00Z', distance_km: 4.8, confidence: 'n', frp: 3.6, lat: -0.32, lon: 109.59 },
+      ],
+    },
+  },
 ];
 
+const ACTIVE = DEFS.filter((d) => !d.state);
+
 const decisions = new Map<string, Decision>([
+  ['C-0915-001', {
+    action: 'reject', by: 'operator@contoh.id', at: '2023-09-15T17:20:00Z', alert_id: null,
+    reason: 'Daops Manggala Agni Kubu Raya melaporkan lahan ini sudah dipadamkan sore tadi; panas berasal dari bekas bakaran.',
+  }],
   ['C-0923-001', { action: 'publish', by: 'operator@contoh.id', at: '2023-09-23T17:02:00Z', reason: null, alert_id: 'A-0923-001' }],
 ]);
 
@@ -365,7 +416,7 @@ function toDetail(d: ClusterDef): ClusterDetail {
   const uN = d.neighbours.filter((s) => s === 'anomaly').length / 8;
   return {
     id: d.id,
-    state: 'active',
+    state: d.state ?? 'active',
     province: d.province,
     rep_pixel: pixelId(d.pixels[0]),
     centroid: centroid(d.pixels),
@@ -403,7 +454,7 @@ function buildGrid(sc: Scenario): Grid {
   if (hit) return hit;
   const clusterPx = new Map<string, { id: string; U: number }>();
   if (sc !== 'kosong') {
-    for (const d of DEFS) {
+    for (const d of ACTIVE) {
       const U = toDetail(d).utility_score;
       d.pixels.forEach((p, i) => {
         const { row, col } = cell(p);
@@ -411,7 +462,7 @@ function buildGrid(sc: Scenario): Grid {
       });
     }
   }
-  const allPx = DEFS.flatMap((d) => d.pixels);
+  const allPx = ACTIVE.flatMap((d) => d.pixels);
   const near = (p: LngLat, dist: number) => allPx.some((q) => Math.abs(q[0] - p[0]) <= dist && Math.abs(q[1] - p[1]) <= dist);
 
   const features: Grid['features'] = [];
@@ -484,6 +535,7 @@ function buildMeta(sc: Scenario): Meta {
       himawari: { last_slot: AS_OF, delay_min: 18 },
       gk2a: late ? { last_slot: '2023-09-24T14:20:00Z', delay_min: 55 } : { last_slot: AS_OF, delay_min: 22 },
     },
+    nights: { first: ARCHIVE_FIRST, last: nightOf(AS_OF) },
   };
 }
 
@@ -522,42 +574,107 @@ function buildCompact(sc: Scenario): GridCompact {
   };
 }
 
-/** Status per slot yang berevolusi menuju status slot terakhir (sama persis dengan buildCompact). */
+// ---------- arsip malam ----------
+
+const DAY_MS = 86_400_000;
+const nightIdx = (night: string) => Math.round((Date.parse(night) - Date.parse(ARCHIVE_FIRST)) / DAY_MS);
+const slotsOf = (night: string) => {
+  const t0 = Date.parse(`${night}T13:00:00Z`);
+  return Array.from({ length: NIGHT_SLOTS }, (_, k) => iso(t0 + k * SLOT_MS));
+};
+const AREA_CENTERS: LngLat[] = AREAS.map(({ rings: [r] }) => [r.reduce((s, p) => s + p[0], 0) / r.length, r.reduce((s, p) => s + p[1], 0) / r.length]);
+
+/** Slot terakhir yang sudah dievaluasi pada malam ini; -1 bila di luar arsip. */
+function lastSlotOf(night: string): number {
+  const asOfNight = nightOf(AS_OF);
+  if (night > asOfNight || night < ARCHIVE_FIRST) return -1;
+  return night === asOfNight ? Math.round((Date.parse(AS_OF) - Date.parse(`${night}T13:00:00Z`)) / SLOT_MS) : NIGHT_SLOTS - 1;
+}
+
+const seriesCache = new Map<string, Map<string, Status>>();
+/** Status kelompok di slot k malam itu; slot sesudah ujung deret (04.00–04.50 WIB) meneruskan nilai terakhirnya. */
+function seriesStatus(d: ClusterDef, slots: string[], k: number): Status | undefined {
+  let m = seriesCache.get(d.id);
+  if (!m) seriesCache.set(d.id, (m = new Map(toDetail(d).series.map((p) => [p.slot, p.status]))));
+  return m.get(slots[k]) ?? (k > SERIES_END ? m.get(slots[SERIES_END]) : undefined);
+}
+
+/** Apakah kelompok ini AWAS di salah satu slot malam itu (sampai slot terakhir yang sudah ada). */
+function awasOn(d: ClusterDef, night: string): boolean {
+  const slots = slotsOf(night);
+  const last = lastSlotOf(night);
+  for (let k = 0; k <= last; k++) if (seriesStatus(d, slots, k) === 'AWAS') return true;
+  return false;
+}
+
+const nightCache = new Map<string, NightCompact>();
+
+/**
+ * Status per slot untuk satu malam. Malam replay berevolusi menuju status slot terakhir (sama persis
+ * dengan buildCompact); malam sebelumnya punya lebih sedikit piksel Pantau dan dua awan yang bergeser.
+ */
 function buildNight(sc: Scenario, night: string): NightCompact {
+  const key = `${sc}|${night}`;
+  const hit = nightCache.get(key);
+  if (hit) return hit;
   const grid = buildGrid(sc);
   const latest = grid.features.map((f) => STATUS_CODE[f.properties.status]);
-  const t0 = Date.parse(`${night}T13:00:00Z`);
-  const slots = Array.from({ length: 54 }, (_, k) => iso(t0 + k * SLOT_MS));
-  const asOfNight = nightOf(AS_OF);
-  const last = night === asOfNight ? Math.round((Date.parse(AS_OF) - t0) / SLOT_MS) : night < asOfNight ? 53 : -1;
-  const series = new Map(DEFS.map((d) => [d.id, new Map(toDetail(d).series.map((p) => [p.slot, p.status]))]));
+  const slots = slotsOf(night);
+  const current = night === nightOf(AS_OF);
+  const last = lastSlotOf(night);
+  const span = current ? last : NIGHT_SLOTS - 1;
+  const ni = nightIdx(night);
+  // Menjelang puncak kemarau (24 Sep) makin banyak piksel Pantau.
+  const watchShare = current ? 1 : 0.15 + 0.75 * (ni / nightIdx(nightOf(AS_OF)));
+  const defs = sc === 'kosong' ? [] : DEFS;
+  const index = new Map(grid.features.map((f, i) => [f.properties.pixel_id, i]));
+  const owner = new Map<number, ClusterDef>();
+  for (const d of defs) for (const p of d.pixels) { const i = index.get(pixelId(p)); if (i != null) owner.set(i, d); }
+  const rc = grid.features.map((f) => cell(f.geometry.coordinates as LngLat));
+  const clouds = current ? [] : [0, 1].map((j) => {
+    const [x, y] = AREA_CENTERS[Math.floor(rand(ni, j, 21) * AREA_CENTERS.length)];
+    return { x: x + (rand(ni, j, 22) - 0.5) * 0.3, y: y + (rand(ni, j, 23) - 0.5) * 0.2, rx: 0.12 + rand(ni, j, 24) * 0.12, ry: 0.08 + rand(ni, j, 25) * 0.08 };
+  });
 
   const evolve = (k: number): string => {
     let s = '';
     grid.features.forEach((f, i) => {
       const p = f.geometry.coordinates as LngLat;
-      const { row, col } = cell(p);
-      const id = f.properties.cluster_id;
+      const { row, col } = rc[i];
+      const d = owner.get(i);
+      const st = d && seriesStatus(d, slots, k);
+      const cloudy = !current
+        ? clouds.some((c) => ((p[0] - (c.x - 0.01 * (span - k))) / c.rx) ** 2 + ((p[1] - c.y) / c.ry) ** 2 <= 1)
+        : sc === 'awan'
+          ? f.properties.status === 'NO_OBSERVATION' && rand(row, col, 13) < 0.3 + 0.7 * (k / Math.max(1, last))
+          : ((p[0] - (113.66 - 0.012 * (last - k))) / 0.08) ** 2 + ((p[1] + 2.36) / 0.06) ** 2 <= 1;
       let code: StatusCode;
-      const cloudy = sc === 'awan'
-        ? f.properties.status === 'NO_OBSERVATION' && rand(row, col, 13) < 0.3 + 0.7 * (k / Math.max(1, last))
-        : ((p[0] - (113.66 - 0.012 * (last - k))) / 0.08) ** 2 + ((p[1] + 2.36) / 0.06) ** 2 <= 1;
-      if (id) code = STATUS_CODE[series.get(id)?.get(slots[k]) ?? 'SAFE'];
+      if (st) code = STATUS_CODE[st];
       else if (cloudy) code = 'N';
-      else if (latest[i] === 'W') code = k >= Math.floor(rand(row, col, 11) * last) ? 'W' : 'S';
-      else code = 'S';
+      else if (latest[i] === 'W' && (current || rand(row, col, 40 + ni) < watchShare)) {
+        code = k >= Math.floor(rand(row, col, current ? 11 : 11 + ni * 7) * span) ? 'W' : 'S';
+      } else code = 'S';
       s += code;
     });
     return s;
   };
 
-  return {
+  const clusters: Record<string, number[]> = {};
+  for (const d of defs) {
+    if (!awasOn(d, night)) continue;
+    clusters[d.id] = d.pixels.map((p) => index.get(pixelId(p))).filter((i): i is number => i != null).sort((a, b) => a - b);
+  }
+
+  const out: NightCompact = {
     pixels_version: PIXELS_VERSION,
     night,
     slots,
-    status: slots.map((_, k) => (k > last ? null : k === last && night === asOfNight ? latest.join('') : evolve(k))),
-    n_sat: slots.map((_, k) => (k > last ? null : sc === 'satu_satelit' && k >= last - 4 ? 1 : 2)),
+    status: slots.map((_, k) => (k > last ? null : k === last && current ? latest.join('') : evolve(k))),
+    n_sat: slots.map((_, k) => (k > last ? null : current && sc === 'satu_satelit' && k >= last - 4 ? 1 : 2)),
+    clusters,
   };
+  nightCache.set(key, out);
+  return out;
 }
 
 function buildBasemaps(): Basemap[] {
@@ -588,9 +705,10 @@ export const mockApi: Api = {
     const r = await fetch(`${import.meta.env.BASE_URL}mock/provinces.geojson`);
     return (await r.json()) as ProvinceBoundary;
   },
-  clusters: () => {
-    const sc = currentScenario();
-    return wait(sc === 'kosong' ? [] : DEFS.map((d) => toSummary(toDetail(d))));
+  clusters: (night) => {
+    if (currentScenario() === 'kosong') return wait([]);
+    const defs = night ? DEFS.filter((d) => awasOn(d, night)) : ACTIVE;
+    return wait(defs.map((d) => toSummary(toDetail(d))));
   },
   cluster: async (id) => {
     const sc = currentScenario();

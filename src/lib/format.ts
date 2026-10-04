@@ -29,6 +29,15 @@ export function fmtSlot(iso: string, lang: Lang): string {
   return `${fmtDate(iso, lang)} ${fmtTime(iso, lang)} WIB`;
 }
 
+/** Malam YYYY-MM-DD (tanggal WIB saat malam dimulai) → "Min, 24 Sep 2023" / "Sun, 24 Sep 2023". */
+export function fmtNight(night: string, lang: Lang): string {
+  // en-US: "Sep" (en-GB kini menulis "Sept"); urutan dirakit sendiri di bawah.
+  const f = new Intl.DateTimeFormat(lang === 'id' ? 'id-ID' : 'en-US', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const p: Record<string, string> = {};
+  for (const x of f.formatToParts(new Date(`${night}T12:00:00Z`))) p[x.type] = x.value;
+  return `${p.weekday.replace('.', '')}, ${p.day} ${p.month.replace('.', '')} ${p.year}`;
+}
+
 export function fmtNum(n: number, digits: number, lang: Lang): string {
   return n.toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', {
     minimumFractionDigits: digits, maximumFractionDigits: digits,

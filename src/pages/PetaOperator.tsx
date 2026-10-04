@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import type { ProvinceCode, Status, StatusCode } from '../types';
+import type { ClusterSummary, ProvinceBoundary, ProvinceCode, Status, StatusCode } from '../types';
 import { api } from '../api';
 import { useI18n } from '../i18n';
 import { useLoad } from '../lib/useLoad';
-import { fmtNum } from '../lib/format';
+import { errorText } from '../lib/errors';
+import { fmtNight, fmtNum, fmtSlot } from '../lib/format';
 import { load, save } from '../lib/storage';
 import { detectLite, loadLitePref, saveLitePref } from '../lib/device';
 import { ISLANDS, PROVINCES, REGION, provincesOf } from '../lib/provinces';
 import {
-  STATUS_CODE, cellAt, cellByPixelId, cellCenter, decodeUtility, nightOf, nightStart, slotIndex, utilityAt,
+  NIGHT_SLOTS, STATUS_CODE, cellAt, cellByPixelId, cellCenter, decodeUtility, nightOf, nightStart, slotIndex, utilityAt,
 } from '../lib/grid';
 import { MapController, type LayerKey } from '../map/map';
 import { StatusBadge, STATUS_KEY } from '../components/StatusBadge';
@@ -23,6 +24,20 @@ import { StatusIcon } from '../components/icons';
 
 const ALL: Status[] = ['AWAS', 'WATCH', 'NO_OBSERVATION', 'SAFE'];
 const COORD = /^(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)$/;
+
+type Sort = 'utility' | 'newest' | 'oldest';
+const SORTS: Record<Sort, (a: ClusterSummary, b: ClusterSummary) => number> = {
+  utility: (a, b) => b.utility_score - a.utility_score,
+  newest: (a, b) => b.trigger_slot.localeCompare(a.trigger_slot), // ISO UTC: urut leksikal = urut waktu
+  oldest: (a, b) => a.trigger_slot.localeCompare(b.trigger_slot),
+};
+
+/** Indeks slot terakhir yang sudah berisi status. */
+function lastFilled(status: (string | null)[]): number {
+  let i = status.length - 1;
+  while (i >= 0 && status[i] == null) i--;
+  return i;
+}
 
 export function PetaOperator({ dark }: { dark: boolean }) {
   const { t, lang } = useI18n();
@@ -41,35 +56,48 @@ export function PetaOperator({ dark }: { dark: boolean }) {
   // ---------- filter + seleksi ----------
   const [statuses, setStatuses] = useState<Status[]>(ALL);
   const [province, setProvince] = useState<ProvinceCode | ''>('');
+  const [sort, setSort] = useState<Sort>('utility');
+  const [nightSel, setNightSel] = useState<string | null>(null); // null = malam replay terbaru
   const [selected, setSelected] = useState<string | null>(null);
   const [cell, setCell] = useState(-1);
-  const [slot, setSlot] = useState<number | null>(null); // null = slot terbaru
+  const [slot, setSlot] = useState<number | null>(null); // null = slot terakhir malam yang dibuka
   const [playing, setPlaying] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(true);
   const [query, setQuery] = useState('');
   const [searchMsg, setSearchMsg] = useState<string | null>(null);
 
   // ---------- data ----------
-  const base = useLoad(
-    () => Promise.all([api.meta(), api.pixels(), api.gridCompact(), api.clusters(), api.basemaps()]),
-    [],
-  );
-  const [meta, index, compact, clusters, basemaps] = base.data ?? [];
-  const nightKey = meta ? nightOf(meta.last_slot) : null;
-  const night = useLoad(() => (nightKey ? api.night(nightKey) : Promise.resolve(null)), [nightKey]);
+  const base = useLoad(() => Promise.all([api.meta(), api.pixels(), api.gridCompact(), api.basemaps()]), []);
+  const [meta, index, compact, basemaps] = base.data ?? [];
+  const currentNight = meta ? nightOf(meta.last_slot) : null;
+  const isCurrent = nightSel == null;
+  const viewNight = nightSel ?? currentNight;
+  const night = useLoad(() => (viewNight ? api.night(viewNight) : Promise.resolve(null)), [viewNight]);
+  const nightData = night.data?.night === viewNight ? night.data : null; // abaikan data malam sebelumnya saat memuat
+  // Malam terbaru: kelompok aktif. Malam arsip: kelompok yang AWAS malam itu, apa pun state-nya.
+  const clustersQ = useLoad(() => (meta ? api.clusters(nightSel ?? undefined) : Promise.resolve(null)), [meta, nightSel]);
+  const clusters = clustersQ.loading ? null : (clustersQ.data ?? null);
   const peat = useLoad(() => api.peatBoundary(), []);
-  const provinces = useLoad(() => (layers.provinces ? api.provinces() : Promise.resolve(null)), [layers.provinces]);
+  // Batas provinsi dimuat bila layernya menyala ATAU ada provinsi terpilih (untuk garis sorotan).
+  const provRef = useRef<Promise<ProvinceBoundary> | null>(null);
+  const needProv = layers.provinces || province !== '';
+  const provinces = useLoad(
+    () => (needProv ? (provRef.current ??= api.provinces().catch((e) => { provRef.current = null; throw e; })) : Promise.resolve(null)),
+    [needProv],
+  );
 
   const latest = meta ? slotIndex(meta.last_slot, nightStart(meta.last_slot)) : 0;
-  const cur = slot ?? latest;
-  const isLatest = cur === latest;
-  const statusStr = isLatest ? (compact?.status ?? null) : (night.data?.status[cur] ?? null);
+  const last = isCurrent ? latest : nightData ? lastFilled(nightData.status) : NIGHT_SLOTS - 1;
+  const cur = slot ?? last;
+  const atLast = cur === last;
+  const statusStr = isCurrent && atLast ? (compact?.status ?? null) : (nightData?.status[cur] ?? null);
+  const clusterCells = isCurrent ? compact?.clusters : nightData?.clusters;
   const utility = useMemo(() => (compact ? decodeUtility(compact.utility) : null), [compact]);
   const clusterOfCell = useMemo(() => {
     const m = new Map<number, string>();
-    for (const [id, cells] of Object.entries(compact?.clusters ?? {})) for (const i of cells) m.set(i, id);
+    for (const [id, cells] of Object.entries(clusterCells ?? {})) for (const i of cells) m.set(i, id);
     return m;
-  }, [compact]);
+  }, [clusterCells]);
 
   // ---------- peta ----------
   const onCell = useRef<(i: number) => void>(() => {});
@@ -85,7 +113,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
 
   useEffect(() => {
     const c = new MapController(mapEl.current!, {
-      dark, lite, basemap, basemaps: [], onCell: (i) => onCell.current(i),
+      dark, lite, lang, basemap, basemaps: [], onCell: (i) => onCell.current(i),
     });
     ctl.current = c;
     return () => { c.destroy(); ctl.current = null; };
@@ -95,8 +123,9 @@ export function PetaOperator({ dark }: { dark: boolean }) {
 
   useEffect(() => { ctl.current?.setBasemap(basemap, dark, basemaps ?? []); save('asapify.basemap', basemap); }, [basemap, dark, basemaps]);
   useEffect(() => { ctl.current?.setLite(lite); }, [lite]);
+  useEffect(() => { ctl.current?.setLang(lang); }, [lang]);
   useEffect(() => { if (index) ctl.current?.setData({ index }); }, [index]);
-  useEffect(() => { if (compact) ctl.current?.setData({ clusters: compact.clusters }); }, [compact]);
+  useEffect(() => { ctl.current?.setData({ clusters: clusterCells ?? {} }); }, [clusterCells]);
   useEffect(() => { if (peat.data) ctl.current?.setData({ peat: peat.data }); }, [peat.data]);
   useEffect(() => { if (provinces.data) ctl.current?.setData({ provinces: provinces.data }); }, [provinces.data]);
   useEffect(() => { ctl.current?.setStatus(statusStr); }, [statusStr]);
@@ -122,33 +151,33 @@ export function PetaOperator({ dark }: { dark: boolean }) {
     return () => { alive = false; };
   }, [selected]);
 
-  // Pemutar: maju satu slot per tik sampai slot terbaru, lalu berhenti.
+  // Pemutar: maju satu slot per tik sampai slot terakhir malam itu, lalu berhenti.
   const curRef = useRef(cur);
   curRef.current = cur;
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => {
       const next = curRef.current + 1;
-      if (next >= latest) { setPlaying(false); setSlot(null); } else setSlot(next);
+      if (next >= last) { setPlaying(false); setSlot(null); } else setSlot(next);
     }, lite ? 900 : 550);
     return () => clearInterval(id);
-  }, [playing, latest, lite]);
+  }, [playing, last, lite]);
 
   // Panel lebar/sempit berubah → ukur ulang kanvas.
   useEffect(() => { const id = setTimeout(() => ctl.current?.resize(), 220); return () => clearTimeout(id); }, [sheetOpen]);
 
   // ---------- turunan untuk UI ----------
   const visible = useMemo(
-    () => (clusters ?? []).filter((c) => !province || c.province === province).sort((a, b) => b.utility_score - a.utility_score),
-    [clusters, province],
+    () => (clusters ?? []).filter((c) => !province || c.province === province).sort(SORTS[sort]),
+    [clusters, province, sort],
   );
   const cloudy = useMemo(() => {
     if (!statusStr) return false;
     return (statusStr.split('N').length - 1) / statusStr.length > 0.5;
   }, [statusStr]);
   const history = useMemo(
-    () => (cell >= 0 ? (night.data?.status ?? []).map((s) => (s ? (s[cell] as StatusCode) : null)) : []),
-    [night.data, cell],
+    () => (cell >= 0 ? (nightData?.status ?? []).map((s) => (s ? (s[cell] as StatusCode) : null)) : []),
+    [nightData, cell],
   );
 
   const toggle = (s: Status) => setStatuses((c) => (c.includes(s) ? c.filter((x) => x !== s) : [...c, s]));
@@ -197,8 +226,16 @@ export function PetaOperator({ dark }: { dark: boolean }) {
   };
 
   const onPlay = (p: boolean) => {
-    if (p && isLatest) setSlot(0);
+    if (p && atLast) setSlot(0);
     setPlaying(p);
+  };
+
+  const goNight = (n: string | null) => {
+    setPlaying(false);
+    setSlot(null);
+    setCell(-1);
+    setSelected(null);
+    setNightSel(n == null || n === currentNight ? null : n);
   };
 
   const setLite = (on: boolean) => {
@@ -207,6 +244,8 @@ export function PetaOperator({ dark }: { dark: boolean }) {
     saveLitePref(pref);
   };
 
+  const loadError = base.error ?? clustersQ.error;
+
   return (
     <div className={`map-page ${sheetOpen ? 'sheet-open' : ''} ${lite ? 'is-lite' : ''}`}>
       <aside className="panel" aria-label={t('map.panel')}>
@@ -214,7 +253,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
           <span />
         </button>
 
-        {meta ? <DataBanner meta={meta} cloudy={cloudy} /> : <div className="skel" style={{ height: 30 }} />}
+        {meta ? <DataBanner meta={meta} cloudy={cloudy} archive={isCurrent ? null : viewNight} /> : <div className="skel" style={{ height: 30 }} />}
 
         <form className="search" onSubmit={onSearch} role="search">
           <label htmlFor="map-q" className="lbl">{t('search.label')}</label>
@@ -251,19 +290,27 @@ export function PetaOperator({ dark }: { dark: boolean }) {
 
         <div className="list-head">
           <b>{t('map.clusters_title', { n: visible.length })}</b>
-          <span className="muted">{t('map.sort')}</span>
+          <label className="sort">
+            <span className="sr-only">{t('map.sort_label')}</span>
+            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t('map.sort_label')}>
+              <option value="utility">{t('map.sort_utility')}</option>
+              <option value="newest">{t('map.sort_newest')}</option>
+              <option value="oldest">{t('map.sort_oldest')}</option>
+            </select>
+          </label>
         </div>
 
-        {base.error && (
+        {loadError && (
           <div className="error" role="alert">
-            {t('load_error', { msg: base.error.message })} <button className="link-btn" onClick={base.reload}>{t('retry')}</button>
+            {t('load_error', { msg: errorText(loadError, t) })}{' '}
+            <button className="link-btn" onClick={() => { base.reload(); clustersQ.reload(); }}>{t('retry')}</button>
           </div>
         )}
 
-        {base.loading && !base.data ? (
+        {!clusters && !loadError ? (
           <div className="queue">{[0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: 92 }} />)}</div>
-        ) : visible.length === 0 && !base.error ? (
-          <p className="empty">{t('map.empty')}</p>
+        ) : visible.length === 0 && !loadError ? (
+          <p className="empty">{isCurrent ? t('map.empty') : t('map.empty_night', { date: fmtNight(viewNight!, lang) })}</p>
         ) : (
           <ul className="queue">
             {visible.map((c) => (
@@ -271,7 +318,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
                 <button className="qi-main" onClick={() => select(c.id, c.centroid)} aria-pressed={selected === c.id}>
                   <span className="qi-top">
                     <b className="qi-id">{c.id}</b>
-                    <span className="qi-u" aria-label={`Utility ${fmtNum(c.utility_score, 2, lang)}`}>
+                    <span className="qi-u" aria-label={`${t('map.utility')} ${fmtNum(c.utility_score, 2, lang)}`}>
                       <small>U</small>{fmtNum(c.utility_score, 2, lang)}
                       <i style={{ ['--u' as string]: c.utility_score }} />
                     </span>
@@ -279,9 +326,10 @@ export function PetaOperator({ dark }: { dark: boolean }) {
                   <span className="qi-row muted">
                     {t(`prov.${c.province}`)} · {t('map.pixels', { n: c.pixels.length })} · {t('map.nbr', { k: Math.round(c.neighbour_support * 8) })}
                   </span>
+                  <span className="qi-row muted">{t('map.triggered', { when: fmtSlot(c.trigger_slot, lang) })}</span>
                   <span className="qi-row"><EvidenceBadge result={c.verification?.result ?? null} /><DecisionState decision={c.decision} /></span>
                 </button>
-                <Link className="qi-link" to={`/kelompok/${c.id}`}>{t('map.open_detail')} →</Link>
+                <Link className="qi-link" to={`/kelompok/${c.id}`}>{t('map.open_detail')}</Link>
               </li>
             ))}
           </ul>
@@ -293,6 +341,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
             {ALL.map((s) => <li key={s}><StatusBadge status={s} /></li>)}
             <li><i className="lg-line dash" />{t('map.peat')}</li>
             <li><i className="lg-line thin" />{t('lc.layer_provinces')}</li>
+            <li><i className="lg-line focus" />{t('map.province_focus')}</li>
             <li><i className="lg-line thick" />{t('map.cluster')}</li>
             <li><i className="lg-dot" />{t('map.viirs')}</li>
           </ul>
@@ -311,19 +360,23 @@ export function PetaOperator({ dark }: { dark: boolean }) {
           {index && cell >= 0 && statusStr && (
             <PixelInspector
               index={index} cell={cell}
-              status={statusStr[cell] as StatusCode} latestStatus={(compact?.status[cell] as StatusCode) ?? null}
-              utility={utilityAt(utility, cell)}
-              nSat={isLatest ? (compact?.n_sat ?? null) : (night.data?.n_sat[cur] ?? null)}
-              clusterId={clusterOfCell.get(cell) ?? null} history={history} slot={cur} isLatest={isLatest}
+              status={statusStr[cell] as StatusCode}
+              latestStatus={isCurrent ? ((compact?.status[cell] as StatusCode) ?? null) : null}
+              utility={isCurrent ? utilityAt(utility, cell) : undefined}
+              nSat={isCurrent && atLast ? (compact?.n_sat ?? null) : (nightData?.n_sat[cur] ?? null)}
+              clusterId={clusterOfCell.get(cell) ?? null} history={history} slot={cur} isLatest={atLast}
+              night={isCurrent ? null : viewNight}
               onClose={() => setCell(-1)}
             />
           )}
         </div>
-        {meta && (
+        {meta && viewNight && (
           <div className="map-overlay bottom">
             <SlotPlayer
-              meta={meta} night={night.data ?? null} slot={cur} latest={latest} playing={playing}
-              onSlot={(i) => { setPlaying(false); setSlot(i === latest ? null : i); }} onPlay={onPlay}
+              meta={meta} nightKey={viewNight} night={nightData} isCurrent={isCurrent}
+              slot={cur} last={last} playing={playing}
+              onSlot={(i) => { setPlaying(false); setSlot(i === last ? null : i); }} onPlay={onPlay}
+              onNight={goNight}
             />
           </div>
         )}

@@ -55,8 +55,8 @@ export const CONVENTIONS: { title: Txt; body: Txt }[] = [
   {
     title: t('Autentikasi', 'Authentication'),
     body: t(
-      'Endpoint `operator` wajib header `Authorization: Bearer <Firebase ID token>` dengan custom claim `role = "operator"`. Token tidak ada atau tidak sah → 401 `UNAUTHENTICATED`; tanpa peran operator → 403 `FORBIDDEN`. Endpoint `public` tanpa header. (Usulan FE — UI masih memakai login demo.)',
-      '`operator` endpoints require `Authorization: Bearer <Firebase ID token>` with custom claim `role = "operator"`. Missing or invalid token → 401 `UNAUTHENTICATED`; no operator role → 403 `FORBIDDEN`. `public` endpoints need no header. (FE proposal — the UI still uses a demo login.)',
+      'Endpoint `operator` wajib header `Authorization: Bearer <Firebase ID token>` dengan custom claim `role = "operator"`. Token tidak ada atau tidak sah → 401 `UNAUTHENTICATED`; tanpa peran operator → 403 `FORBIDDEN`. Endpoint `public` tanpa header. (Usulan FE; UI masih memakai login demo.)',
+      '`operator` endpoints require `Authorization: Bearer <Firebase ID token>` with custom claim `role = "operator"`. Missing or invalid token → 401 `UNAUTHENTICATED`; no operator role → 403 `FORBIDDEN`. `public` endpoints need no header. (FE proposal; the UI still uses a demo login.)',
     ),
   },
   {
@@ -90,15 +90,15 @@ export const CONVENTIONS: { title: Txt; body: Txt }[] = [
   {
     title: t('Galat', 'Errors'),
     body: t(
-      'Respons non-2xx memakai amplop `{"error": {"code", "message"}}`. `code` stabil (huruf besar, untuk logika UI); `message` Bahasa Indonesia, ditampilkan apa adanya ke operator.',
-      'Non-2xx responses use the envelope `{"error": {"code", "message"}}`. `code` is stable (upper case, for UI logic); `message` is in Indonesian and shown to the operator as-is.',
+      'Respons non-2xx memakai amplop `{"error": {"code", "message"}}`. `code` stabil (huruf besar); UI menulis pesannya sendiri dari `code` dalam bahasa yang dipilih operator. `message` (Bahasa Indonesia) hanya tampil bila `code` belum dikenal UI.',
+      'Non-2xx responses use the envelope `{"error": {"code", "message"}}`. `code` is stable (upper case); the UI writes its own message from `code` in the operator\'s language. `message` (Indonesian) shows only when the UI does not know the `code` yet.',
     ),
   },
   {
     title: t('Aturan isi', 'Content rules'),
     body: t(
-      'Status hanya dari rule engine; verifikasi agen tidak punya field status atau level. Teks apa pun tidak boleh menyebut AWAS sebagai "kebakaran terkonfirmasi". `finding` dan caption berbahasa Indonesia; ringkasan agen dikirim dua bahasa (`summary_id`, `summary_en`).',
-      'Status comes only from the rule engine; agent verification has no status or level field. No text may call AWAS a "confirmed fire". `finding` and captions are in Indonesian; the agent summary is sent in both languages (`summary_id`, `summary_en`).',
+      'Status hanya dari rule engine; verifikasi agen tidak punya field status atau level. Teks apa pun tidak boleh menyebut AWAS sebagai "kebakaran terkonfirmasi". Agen menulis temuan dan ringkasan dalam dua bahasa (`finding` + `finding_en`, `summary_id` + `summary_en`) agar UI tidak mencampur bahasa; caption Telegram tetap Bahasa Indonesia.',
+      'Status comes only from the rule engine; agent verification has no status or level field. No text may call AWAS a "confirmed fire". The agent writes findings and summaries in both languages (`finding` + `finding_en`, `summary_id` + `summary_en`) so the UI never mixes languages; Telegram captions stay in Indonesian.',
     ),
   },
 ];
@@ -141,6 +141,7 @@ export const SCHEMAS: Schema[] = [
       { name: 'n_sat', type: '0 | 1 | 2', req: true, desc: t('Jumlah satelit yang tersedia di last_slot.', 'Number of satellites available at last_slot.') },
       { name: 'sats.himawari', type: 'SatState', req: true, desc: t('Keadaan Himawari-9.', 'Himawari-9 state.') },
       { name: 'sats.gk2a', type: 'SatState', req: true, desc: t('Keadaan GK2A.', 'GK2A state.') },
+      { name: 'nights', type: '{ first: YYYY-MM-DD, last: YYYY-MM-DD }', req: true, desc: t('Rentang malam arsip yang bisa dibuka; mengisi pemilih malam di pemutar slot. `last` = malam dari last_slot.', 'Range of archive nights that can be opened; fills the night picker in the slot player. `last` = the night of last_slot.') },
     ],
   },
   {
@@ -178,7 +179,7 @@ export const SCHEMAS: Schema[] = [
   },
   {
     name: 'GridCompact', origin: 'fe',
-    desc: t('Status semua sel pada satu slot dalam bentuk ringkas; dipakai peta. Diukur untuk 10 ribu sel: ≈ 23 KB mentah / 11 KB gzip, vs GeoJSON ≈ 1,9 MB mentah / 83 KB gzip — dan jauh lebih ringan di-parse di HP.', 'Status of every cell at one slot, compact; used by the map. Measured for 10k cells: ≈ 23 KB raw / 11 KB gzip, vs GeoJSON ≈ 1.9 MB raw / 83 KB gzip — and far lighter to parse on phones.'),
+    desc: t('Status semua sel pada satu slot dalam bentuk ringkas; dipakai peta. Diukur untuk 10 ribu sel: ≈ 23 KB mentah / 11 KB gzip, vs GeoJSON ≈ 1,9 MB mentah / 83 KB gzip, dan jauh lebih ringan di-parse di HP.', 'Status of every cell at one slot, compact; used by the map. Measured for 10k cells: ≈ 23 KB raw / 11 KB gzip, vs GeoJSON ≈ 1.9 MB raw / 83 KB gzip, and far lighter to parse on phones.'),
     fields: [
       { name: 'pixels_version', type: 'string', req: true, desc: t('Harus sama dengan PixelIndex.version; bila beda, UI mengunduh ulang indeks.', 'Must equal PixelIndex.version; if not, the UI re-downloads the index.') },
       { name: 'slot', type: ISO, req: true, desc: t('Slot yang ditampilkan (≤ as_of).', 'Slot shown (≤ as_of).') },
@@ -197,6 +198,7 @@ export const SCHEMAS: Schema[] = [
       { name: 'slots', type: `${ISO}[54]`, req: true, desc: t('13.00–21.50 UTC, tiap 10 menit.', '13:00–21:50 UTC, every 10 minutes.') },
       { name: 'status', type: '(string | null)[54]', req: true, desc: t('Format sama dengan GridCompact.status; null = slot belum dievaluasi atau tidak ada data.', 'Same format as GridCompact.status; null = slot not evaluated yet or no data.') },
       { name: 'n_sat', type: '(0 | 1 | 2 | null)[54]', req: true, desc: t('Satelit per slot.', 'Satellites per slot.') },
+      { name: 'clusters', type: 'Record<cluster_id, integer[]>', req: true, desc: t('Kelompok yang AWAS di salah satu slot malam itu (aktif maupun sudah ditutup) → indeks sel. Garis kelompok di malam arsip digambar dari sini.', 'Clusters that were AWAS in any slot that night (active or closed) → cell indices. Cluster outlines on archive nights come from here.') },
     ],
   },
   {
@@ -309,6 +311,7 @@ export const SCHEMAS: Schema[] = [
     fields: [
       { name: 'source', type: "'rule_engine'|'viirs_firms'|'viirs_image'|'himawari_image'", req: true, desc: t('Asal bukti.', 'Evidence source.') },
       { name: 'finding', type: 'string ≤ 200', req: true, desc: t('Temuan, Bahasa Indonesia. Angka harus ada di hasil tool.', 'Finding, in Indonesian. Every number must exist in a tool result.') },
+      { name: 'finding_en', type: 'string ≤ 200', req: true, origin: 'fe', desc: t('Temuan yang sama dalam bahasa Inggris, untuk UI versi Inggris.', 'The same finding in English, for the English UI.') },
       { name: 'observed_at', type: `${ISO} | null`, req: true, desc: t('Waktu pengamatan bukti.', 'When the evidence was observed.') },
       { name: 'age_h', type: 'number | null', req: true, desc: t('Umur bukti terhadap trigger_slot (jam).', 'Evidence age relative to trigger_slot (hours).') },
     ],
@@ -467,9 +470,9 @@ export const ENDPOINTS: Endpoint[] = [
     id: 'night', method: 'GET', path: '/operator/grid/night', auth: 'operator',
     title: t('Status per slot satu malam', 'Per-slot status for one night'),
     purpose: t('54 string status (format ringkas) untuk satu malam; satu permintaan menggantikan 54 × /operator/grid. Slot setelah as_of = null.', '54 status strings (compact format) for one night; one request replaces 54 × /operator/grid. Slots after as_of = null.'),
-    usedBy: t('Peta → pemutar slot (pita malam: baris ▲ jumlah AWAS per slot), riwayat 54 slot di inspektur piksel.', 'Map → slot player (night ribbon: ▲ row = AWAS count per slot), 54-slot history in the pixel inspector.'),
+    usedBy: t('Peta → pemutar slot (pita malam: baris ▲ jumlah AWAS per slot), pemilih malam arsip (status + garis kelompok malam itu), riwayat 54 slot di inspektur piksel.', 'Map → slot player (night ribbon: ▲ row = AWAS count per slot), archive night picker (status + that night\'s cluster outlines), 54-slot history in the pixel inspector.'),
     params: [
-      { name: 'night', type: 'query · YYYY-MM-DD', req: true, origin: 'fe', desc: t('night_id (tanggal WIB malam dimulai).', 'night_id (WIB date the night starts).') },
+      { name: 'night', type: 'query · YYYY-MM-DD', req: true, origin: 'fe', desc: t('night_id (tanggal WIB malam dimulai), dalam rentang Meta.nights. Di luar rentang → VALIDATION.', 'night_id (WIB date the night starts), within Meta.nights. Outside the range → VALIDATION.') },
       AS_OF_PARAM,
     ],
     responses: [{ code: 200, schema: 'NightCompact', example: 'night', note: t('Contoh dipotong.', 'Example trimmed.') }],
@@ -488,9 +491,10 @@ export const ENDPOINTS: Endpoint[] = [
     id: 'clusters', method: 'GET', path: '/operator/clusters', auth: 'operator',
     title: t('Daftar kelompok AWAS', 'AWAS cluster list'),
     purpose: t('Kelompok AWAS + verifikasi terakhir + keputusan. Respons berupa array langsung (usulan FE).', 'AWAS clusters + latest verification + decision. The response is a bare array (FE proposal).'),
-    usedBy: t('Peta → panel daftar kelompok (urut utility), keadaan "kosong".', 'Map → cluster list panel (sorted by utility), "empty" state.'),
+    usedBy: t('Peta → panel daftar kelompok (UI mengurutkan menurut utility atau trigger_slot), keadaan "kosong".', 'Map → cluster list panel (the UI sorts by utility or trigger_slot), "empty" state.'),
     params: [
-      { name: 'state', type: "query · 'active' | 'closed'", req: false, origin: 'backend', desc: t('Default active. UI memakai active.', 'Default active. The UI uses active.') },
+      { name: 'state', type: "query · 'active' | 'closed'", req: false, origin: 'backend', desc: t('Default active. UI memakai active untuk malam terbaru.', 'Default active. The UI uses active for the latest night.') },
+      { name: 'night', type: 'query · YYYY-MM-DD', req: false, origin: 'fe', desc: t('Malam arsip: kelompok yang AWAS di salah satu slot malam itu, apa pun state-nya (first_awas_at ≤ akhir malam dan last_awas_at ≥ awal malam). Bila diisi, `state` diabaikan.', 'Archive night: clusters that were AWAS in any slot that night, whatever their state (first_awas_at ≤ night end and last_awas_at ≥ night start). When set, `state` is ignored.') },
       AS_OF_PARAM,
     ],
     responses: [{ code: 200, schema: 'ClusterSummary', example: 'clusters', note: t('ClusterSummary[].', 'ClusterSummary[].') }],
@@ -527,7 +531,7 @@ export const ENDPOINTS: Endpoint[] = [
     body: { schema: 'DecisionRequest', example: 'decisionReq' },
     responses: [
       { code: 201, schema: 'DecisionResponse', example: 'decisionRes' },
-      { code: 409, schema: 'Error', example: 'decisionErr', note: t('UI menampilkan message lalu memuat ulang detail.', 'The UI shows the message, then reloads the detail.') },
+      { code: 409, schema: 'Error', example: 'decisionErr', note: t('UI menampilkan pesan sesuai code lalu memuat ulang detail.', 'The UI shows the message for the code, then reloads the detail.') },
     ],
     errors: ['UNAUTHENTICATED', 'FORBIDDEN', 'NOT_FOUND', 'ALREADY_DECIDED', 'REASON_REQUIRED', 'CAPTION_INVALID'],
   },

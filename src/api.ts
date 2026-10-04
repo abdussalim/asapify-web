@@ -41,7 +41,7 @@ const liveApi: Api = {
   gridCompact: (asOf) => req<GridCompact>(`/operator/grid?format=compact${asOf ? `&as_of=${enc(asOf)}` : ''}`),
   night: (night) => req<NightCompact>(`/operator/grid/night?night=${enc(night)}`),
   basemaps: () => req<Basemap[]>('/operator/basemaps'),
-  clusters: () => req<ClusterSummary[]>('/operator/clusters?state=active'),
+  clusters: (night) => req<ClusterSummary[]>(night ? `/operator/clusters?night=${enc(night)}` : '/operator/clusters?state=active'),
   cluster: (id) => req<ClusterDetail>(`/operator/clusters/${enc(id)}`),
   decide: async (id, body) => {
     await req(`/operator/clusters/${enc(id)}/decision`, { method: 'POST', body: JSON.stringify(body) });
@@ -58,7 +58,7 @@ const mockApi: Api = {
   gridCompact: (asOf) => mock().then((m) => m.gridCompact(asOf)),
   night: (night) => mock().then((m) => m.night(night)),
   basemaps: () => mock().then((m) => m.basemaps()),
-  clusters: () => mock().then((m) => m.clusters()),
+  clusters: (night) => mock().then((m) => m.clusters(night)),
   cluster: (id) => mock().then((m) => m.cluster(id)),
   decide: (id, body) => mock().then((m) => m.decide(id, body)),
   peatBoundary: () => mock().then((m) => m.peatBoundary()),

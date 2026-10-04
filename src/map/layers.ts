@@ -1,8 +1,9 @@
 import type { ExpressionSpecification, GeoJSONSource, Map as MlMap, StyleSpecification } from 'maplibre-gl';
-import type { Feature, FeatureCollection, Point, Polygon } from 'geojson';
+import type { Feature, FeatureCollection, Point, Polygon, Position } from 'geojson';
 import type { Basemap, PeatBoundary, PixelIndex, ProvinceBoundary, ProvinceCode, Status, ViirsDetection } from '../types';
 import { STATUS_CODE, cellCenter, cellsBounds } from '../lib/grid';
 import { PROVINCES } from '../lib/provinces';
+import type { Lang } from '../i18n';
 
 // Layer peta. Geometri sel dibangun SEKALI dari indeks piksel; status per slot, filter status,
 // dan sorotan memakai feature-state + ekspresi paint, jadi memutar slot tidak memicu re-tiling.
@@ -85,8 +86,8 @@ function clusterShapes(ix: PixelIndex | null, clusters: Record<string, number[]>
   return { outlines, labels };
 }
 
-/** Satu titik label per provinsi: pusat kotak poligon terbesarnya. Nama resmi dari kode BPS. */
-function provinceLabels(fc: ProvinceBoundary): FeatureCollection<Point, { name: string }> {
+/** Satu titik label per provinsi: pusat kotak poligon terbesarnya. Nama dari kode BPS, mengikuti bahasa UI. */
+function provinceLabels(fc: ProvinceBoundary, lang: Lang): FeatureCollection<Point, { name: string; code: string }> {
   return {
     type: 'FeatureCollection',
     features: fc.features.map((f) => {
@@ -94,9 +95,30 @@ function provinceLabels(fc: ProvinceBoundary): FeatureCollection<Point, { name: 
       for (const poly of f.geometry.coordinates) if (poly[0].length > best.length) best = poly[0];
       const xs = best.map((c) => c[0]), ys = best.map((c) => c[1]);
       const c: [number, number] = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
-      const name = PROVINCES[f.properties.code]?.id ?? f.properties.name;
-      return { type: 'Feature' as const, properties: { name }, geometry: { type: 'Point' as const, coordinates: c } };
+      const name = PROVINCES[f.properties.code]?.[lang] ?? f.properties.name;
+      return { type: 'Feature' as const, properties: { name, code: f.properties.code }, geometry: { type: 'Point' as const, coordinates: c } };
     }),
+  };
+}
+
+// Topeng: kotak jauh lebih besar dari wilayah pantau, dengan provinsi terpilih sebagai lubang.
+const WORLD: Position[] = [[80, -20], [135, -20], [135, 20], [80, 20], [80, -20]];
+const ringArea = (r: Position[]) => r.reduce((a, p, i) => { const q = r[(i + 1) % r.length]; return a + (q[0] - p[0]) * (q[1] + p[1]); }, 0);
+
+/** Garis batas provinsi terpilih, topeng peredup di luar provinsi, dan titik labelnya. */
+function provinceFocus(fc: ProvinceBoundary, code: ProvinceCode | '', lang: Lang) {
+  const f = code ? fc.features.find((x) => x.properties.code === code) : undefined;
+  if (!f) return { line: EMPTY_FC, mask: EMPTY_FC, label: EMPTY_FC };
+  // MapLibre mengenali lubang dari arah putar yang berlawanan dengan cincin luar.
+  const outer = Math.sign(ringArea(WORLD));
+  const holes = f.geometry.coordinates.map(([r]) => (Math.sign(ringArea(r)) === outer ? [...r].reverse() : r));
+  return {
+    line: { type: 'FeatureCollection' as const, features: [f] },
+    mask: {
+      type: 'FeatureCollection' as const,
+      features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [WORLD, ...holes] } }],
+    },
+    label: provinceLabels({ type: 'FeatureCollection', features: [f] }, lang),
   };
 }
 
@@ -165,14 +187,18 @@ function pixelPaint(o: PaintOpts) {
 }
 
 /** Pasang semua sumber + layer (setiap style.load, termasuk ganti basemap/tema). */
-export function installLayers(map: MlMap, o: PaintOpts, data: MapData, selectedCell: number) {
+export function installLayers(map: MlMap, o: PaintOpts, data: MapData, selectedCell: number, province: ProvinceCode | '', lang: Lang) {
   const p = PALETTE[o.dark ? 'dark' : 'light'];
   addImages(map, p);
   const { outlines, labels } = clusterShapes(data.index, data.clusters);
+  const focus = provinceFocus(data.provinces, province, lang);
   const pp = pixelPaint(o);
 
+  map.addSource('province-mask', { type: 'geojson', data: focus.mask });
+  map.addSource('province-focus', { type: 'geojson', data: focus.line });
+  map.addSource('province-focus-label', { type: 'geojson', data: focus.label });
   map.addSource('provinces', { type: 'geojson', data: data.provinces });
-  map.addSource('province-labels', { type: 'geojson', data: provinceLabels(data.provinces) });
+  map.addSource('province-labels', { type: 'geojson', data: provinceLabels(data.provinces, lang) });
   map.addSource('pixels', { type: 'geojson', data: cellPolygons(data.index), buffer: 0, tolerance: 0 });
   map.addSource('peat', { type: 'geojson', data: data.peat });
   map.addSource('clusters', { type: 'geojson', data: outlines });
@@ -180,6 +206,8 @@ export function installLayers(map: MlMap, o: PaintOpts, data: MapData, selectedC
   map.addSource('selection', { type: 'geojson', data: selectionShape(data.index, selectedCell) });
   map.addSource('viirs', { type: 'geojson', data: viirsPoints(data.viirs) });
 
+  // Bayangan di luar provinsi terpilih: dalam provinsi tetap terang, sekitarnya meredup.
+  map.addLayer({ id: 'province-mask', type: 'fill', source: 'province-mask', paint: { 'fill-color': o.dark ? '#000000' : p.ink, 'fill-opacity': o.dark ? 0.45 : 0.16 } });
   map.addLayer({ id: 'provinces-line', type: 'line', source: 'provinces', paint: { 'line-color': p.ink, 'line-width': 1.1, 'line-opacity': 0.45 } });
   map.addLayer({ id: 'pixel-fill', type: 'fill', source: 'pixels', paint: { 'fill-color': pp.fillColor, 'fill-opacity': pp.fillOpacity } });
   map.addLayer({ id: 'pixel-hatch', type: 'fill', source: 'pixels', paint: { 'fill-pattern': 'hatch', 'fill-opacity': pp.hatchOpacity } });
@@ -188,6 +216,14 @@ export function installLayers(map: MlMap, o: PaintOpts, data: MapData, selectedC
     paint: { 'line-color': p.ink, 'line-width': 0.4, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0, 11, 0.16] },
   });
   map.addLayer({ id: 'peat-boundary', type: 'line', source: 'peat', paint: { 'line-color': p.ink, 'line-width': 1, 'line-dasharray': [3, 2], 'line-opacity': 0.5 } });
+  map.addLayer({
+    id: 'province-focus-casing', type: 'line', source: 'province-focus', layout: { 'line-join': 'round' },
+    paint: { 'line-color': p.halo, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7], 'line-opacity': 0.9 },
+  });
+  map.addLayer({
+    id: 'province-focus', type: 'line', source: 'province-focus', layout: { 'line-join': 'round' },
+    paint: { 'line-color': p.ink, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.8, 10, 3] },
+  });
   map.addLayer({ id: 'cluster-glow', type: 'line', source: 'clusters', paint: { 'line-color': p.awas, 'line-width': 10, 'line-blur': 8, 'line-opacity': 0.6 } });
   map.addLayer({ id: 'clusters', type: 'line', source: 'clusters', paint: { 'line-color': p.ink, 'line-width': 1.8, 'line-dasharray': [2.5, 1.5] } });
   map.addLayer({ id: 'clusters-selected', type: 'line', source: 'clusters', filter: ['==', ['get', 'id'], ''], paint: { 'line-color': p.sat, 'line-width': 3.5 } });
@@ -206,6 +242,11 @@ export function installLayers(map: MlMap, o: PaintOpts, data: MapData, selectedC
     id: 'province-label', type: 'symbol', source: 'province-labels', maxzoom: 8,
     layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.12 },
     paint: { 'text-color': p.ink, 'text-opacity': 0.6, 'text-halo-color': p.halo, 'text-halo-width': 1.5 },
+  });
+  map.addLayer({
+    id: 'province-focus-label', type: 'symbol', source: 'province-focus-label', maxzoom: 9,
+    layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 14, 'text-transform': 'uppercase', 'text-letter-spacing': 0.1 },
+    paint: { 'text-color': p.ink, 'text-halo-color': p.halo, 'text-halo-width': 2 },
   });
   map.addLayer({
     id: 'clusters-label', type: 'symbol', source: 'cluster-labels',
@@ -254,6 +295,33 @@ export function applyFilters(map: MlMap, province: ProvinceCode | '', selectedCl
     map.setFilter(id, prov);
   }
   map.setFilter('clusters-selected', ['==', ['get', 'id'], selectedCluster ?? '']);
+  // Label provinsi terpilih digambar tebal oleh province-focus-label; jangan dobel.
+  map.setFilter('province-label', province ? ['!=', ['get', 'code'], province] : null);
+}
+
+/** Ganti sorotan provinsi (atau bahasa labelnya) tanpa memasang ulang layer. */
+export function updateProvinceFocus(map: MlMap, fc: ProvinceBoundary, province: ProvinceCode | '', lang: Lang) {
+  const focus = provinceFocus(fc, province, lang);
+  updateSource(map, 'province-mask', focus.mask);
+  updateSource(map, 'province-focus', focus.line);
+  updateSource(map, 'province-focus-label', focus.label);
+}
+
+const OWN_SOURCES = new Set(['provinces', 'province-labels', 'province-mask', 'province-focus', 'province-focus-label', 'pixels', 'peat', 'clusters', 'cluster-labels', 'selection', 'viirs']);
+
+/**
+ * Label peta dasar vektor (OpenFreeMap/OpenMapTiles) mengikuti bahasa UI: name:id atau name:en,
+ * jatuh ke nama lokal OSM bila terjemahannya tidak ada. Label nomor jalan dibiarkan.
+ */
+export function localizeBasemap(map: MlMap, lang: Lang) {
+  const field: ExpressionSpecification = lang === 'id'
+    ? ['coalesce', ['get', 'name:id'], ['get', 'name']]
+    : ['coalesce', ['get', 'name:en'], ['get', 'name_en'], ['get', 'name']];
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type !== 'symbol' || OWN_SOURCES.has(l.source)) continue;
+    const tf = map.getLayoutProperty(l.id, 'text-field');
+    if (tf != null && JSON.stringify(tf).includes('name')) map.setLayoutProperty(l.id, 'text-field', field);
+  }
 }
 
 export function updateSource(map: MlMap, id: string, data: GeoJSON.GeoJSON) {
