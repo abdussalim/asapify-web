@@ -22,6 +22,22 @@ Salin `.env.example` ke `.env` bila perlu mengganti mode:
 | `VITE_API_BASE` | URL | Basis API untuk mode live; kosong = same-origin (`/api` di-proxy ke `:8080` saat dev) |
 | `VITE_PEAT_LAYER_URL` | URL GeoJSON | Layer `peat-boundary` di bucket publik (mode live) |
 
+## Deploy (GitHub → Vercel)
+
+1. Buat repo kosong di GitHub, lalu dari folder ini:
+   `git remote add origin <url-repo>` → `git push -u origin main`.
+2. Di Vercel: **Add New → Project → Import** repo tersebut. Pengaturan dibaca dari `vercel.json`
+   (Vite, `npm ci`, `npm run build`, output `dist/`), jadi tidak perlu diubah.
+3. Tanpa environment variable apa pun, situs berjalan dalam **mode mock** (data fiktif + login demo).
+   Setelah `asapify-api` siap, isi `VITE_API_MODE=live` dan `VITE_API_BASE=<url asapify-api>`
+   di Project Settings → Environment Variables, lalu redeploy (variabel `VITE_*` dibaca saat build).
+
+`vercel.json` juga mengarahkan semua rute ke `index.html` (deep link `/kelompok/C-0924-002` tidak 404)
+dan menyajikan `/maplibre/*.mjs` sebagai JavaScript untuk worker peta. Butuh Node ≥ 22.12 (`engines`).
+
+> Login demo tidak melindungi apa pun: siapa saja yang membuka URL bisa masuk. Aman selama datanya fiktif;
+> ganti ke Firebase Auth sebelum memakai data asli.
+
 ## Mode mock
 
 Replay fiktif backtest Kalteng 24 Sep 2023 22.10 WIB (bbox `113.5,-2.6,114.3,-1.9`), tiga kelompok:
