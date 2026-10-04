@@ -4,7 +4,7 @@ import {
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Basemap, ProvinceCode, Status } from '../types';
-import { KALIMANTAN } from '../lib/provinces';
+import { REGION } from '../lib/provinces';
 import {
   EMPTY, LAYER_KEYS, applyFilters, applyVisibility, installLayers, selectionShape, setStatusPaint, shapes, styleFor, updateSource,
   type BasemapId, type LayerKey, type MapData,
@@ -49,7 +49,7 @@ export class MapController {
     this.map = new MlMap({
       container,
       style: styleFor(o.basemap, o.dark, o.basemaps),
-      bounds: KALIMANTAN as LngLatBoundsLike,
+      bounds: REGION as LngLatBoundsLike,
       fitBoundsOptions: { padding: 24 },
       attributionControl: false,
       pixelRatio: o.lite ? 1 : window.devicePixelRatio,

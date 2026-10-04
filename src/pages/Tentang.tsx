@@ -88,7 +88,7 @@ export function Tentang() {
         </section>
         <section className="card" aria-labelledby="lim-h">
           <h2 id="lim-h">{t('about.limits_title')}</h2>
-          <ul>{[1, 2, 3, 4].map((n) => <li key={n}>{t(`about.limit${n}`)}</li>)}</ul>
+          <ul>{[1, 2, 3, 4, 5].map((n) => <li key={n}>{t(`about.limit${n}`)}</li>)}</ul>
         </section>
       </div>
 

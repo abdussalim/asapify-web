@@ -62,7 +62,7 @@ function cellPolygons(ix: PixelIndex | null): FeatureCollection<Polygon, { p: st
   for (let i = 0; i < ix.rows.length; i++) {
     const [x, y] = cellCenter(ix, i);
     features[i] = {
-      type: 'Feature', id: i, properties: { p: ix.province[i] },
+      type: 'Feature', id: i, properties: { p: String(ix.province[i]) },
       geometry: { type: 'Polygon', coordinates: [[[x - h, y - h], [x + h, y - h], [x + h, y + h], [x - h, y + h], [x - h, y - h]]] },
     };
   }
@@ -78,7 +78,7 @@ function clusterShapes(ix: PixelIndex | null, clusters: Record<string, number[]>
     if (!cells.length) continue;
     const [[w0, s0], [e0, n0]] = cellsBounds(ix, cells);
     const w = w0 - pad, s = s0 - pad, e = e0 + pad, n = n0 + pad;
-    const p = ix.province[cells[0]];
+    const p = String(ix.province[cells[0]]);
     outlines.features.push({ type: 'Feature', properties: { id, p }, geometry: { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] } });
     labels.features.push({ type: 'Feature', properties: { id, p }, geometry: { type: 'Point', coordinates: [(w + e) / 2, n] } });
   }
@@ -249,7 +249,7 @@ export function applyVisibility(map: MlMap, vis: Record<LayerKey, boolean>, lite
 }
 
 export function applyFilters(map: MlMap, province: ProvinceCode | '', selectedCluster: string | null) {
-  const prov: ExpressionSpecification = province ? ['==', ['get', 'p'], province[1]] : ['boolean', true];
+  const prov: ExpressionSpecification = province ? ['==', ['get', 'p'], province] : ['boolean', true];
   for (const id of ['pixel-fill', 'pixel-hatch', 'pixel-grid', 'icon-watch', 'icon-awas', 'cluster-glow', 'clusters', 'clusters-label']) {
     map.setFilter(id, prov);
   }

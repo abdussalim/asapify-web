@@ -2,25 +2,58 @@ import {
   ApiError,
   type Api, type Attributes, type Basemap, type ClusterDetail, type ClusterSummary, type Decision, type Grid,
   type GridCompact, type LngLat, type Meta, type Neighbour, type NeighbourDir, type NightCompact,
-  type PeatBoundary, type PixelIndex, type ProvinceBoundary, type SeriesPoint, type Status, type StatusCode,
+  type PeatBoundary, type PixelIndex, type ProvinceBoundary, type ProvinceCode, type SeriesPoint, type Status, type StatusCode,
   type VerificationDetail,
 } from '../types';
 import { T_AWAS, T_WATCH, utility } from '../lib/maut';
 import { SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
 import { currentScenario, type Scenario } from './scenario';
 
-// Data FIKTIF untuk demo tanpa backend: replay backtest Kalteng 24 Sep 2023
-// (BACKTEST_BBOX 113.5,-2.6,114.3,-1.9). Bentuk mengikuti backend.html + usulan FE.
+// Data FIKTIF untuk demo tanpa backend: replay 24 Sep 2023 di gambut Sumatra + Kalimantan
+// (15 provinsi; Kalteng = BACKTEST_BBOX 113.5,-2.6,114.3,-1.9). Bentuk mengikuti backend.html + usulan FE.
 
 const AS_OF = '2023-09-24T15:10:00Z'; // 22.10 WIB
 const STEP = 0.02;
-const BBOX = { w: 113.5, s: -2.6, e: 114.3, n: -1.9 };
+const ORIGIN: LngLat = [94.9, 6.2]; // grid gabungan Sumatra + Kalimantan
 
-const PEAT: LngLat[][] = [
-  [[113.55, -1.95], [113.80, -1.93], [113.98, -2.05], [114.00, -2.30], [113.88, -2.42],
-    [113.70, -2.50], [113.56, -2.35], [113.52, -2.15], [113.55, -1.95]],
-  [[114.05, -2.30], [114.25, -2.28], [114.29, -2.45], [114.22, -2.58], [114.06, -2.57],
-    [114.02, -2.45], [114.05, -2.30]],
+/** Poligon kira-kira berbentuk tidak beraturan di sekitar pusat (deterministik). */
+function blob([cx, cy]: LngLat, r: number, seed: number): LngLat[] {
+  const ring: LngLat[] = [];
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    const rr = r * (0.7 + 0.5 * rand(seed, k, 3));
+    ring.push([cx + rr * Math.cos(a), cy + rr * 0.8 * Math.sin(a)]);
+  }
+  ring.push(ring[0]);
+  return ring;
+}
+
+// Area gambut FIKTIF, satu per provinsi, diletakkan di kawasan gambut nyatanya
+// (mis. Sebangau, OKI, Semenanjung Kampar, Berbak, Rawa Tripa, Kubu Raya, danau Mahakam).
+const AREAS: { code: ProvinceCode; rings: LngLat[][] }[] = [
+  { code: '11', rings: [blob([96.62, 3.97], 0.1, 11)] }, // Rawa Tripa, Nagan Raya
+  { code: '12', rings: [blob([99.95, 2.45], 0.12, 12)] }, // Labuhanbatu
+  { code: '13', rings: [blob([99.78, 0.1], 0.07, 13)] }, // Pasaman Barat
+  { code: '14', rings: [blob([102.75, 0.35], 0.3, 14)] }, // Semenanjung Kampar
+  { code: '15', rings: [blob([104.0, -1.35], 0.2, 15)] }, // Berbak, Tanjung Jabung Timur
+  { code: '16', rings: [blob([105.6, -3.35], 0.28, 16)] }, // Ogan Komering Ilir
+  { code: '17', rings: [blob([101.2, -2.55], 0.07, 17)] }, // Mukomuko
+  { code: '18', rings: [blob([105.55, -4.25], 0.15, 18)] }, // Rawa Pitu, Tulang Bawang
+  { code: '19', rings: [blob([106.05, -2.15], 0.08, 19)] }, // Bangka
+  { code: '21', rings: [blob([104.6, -0.18], 0.06, 21)] }, // Lingga
+  { code: '61', rings: [blob([109.55, -0.35], 0.25, 61)] }, // Kubu Raya
+  {
+    code: '62', // Sebangau–Kahayan (backtest Kalteng)
+    rings: [
+      [[113.55, -1.95], [113.80, -1.93], [113.98, -2.05], [114.00, -2.30], [113.88, -2.42],
+        [113.70, -2.50], [113.56, -2.35], [113.52, -2.15], [113.55, -1.95]],
+      [[114.05, -2.30], [114.25, -2.28], [114.29, -2.45], [114.22, -2.58], [114.06, -2.57],
+        [114.02, -2.45], [114.05, -2.30]],
+    ],
+  },
+  { code: '63', rings: [blob([115.18, -2.42], 0.09, 63)] }, // rawa Hulu Sungai
+  { code: '64', rings: [blob([116.3, -0.35], 0.15, 64)] }, // danau Mahakam
+  { code: '65', rings: [blob([117.25, 3.3], 0.1, 65)] }, // Tana Tidung
 ];
 
 // ---------- util ----------
@@ -45,9 +78,9 @@ function inPoly([x, y]: LngLat, ring: LngLat[]): boolean {
   return inside;
 }
 
-/** Indeks grid 0,02° Kalimantan (asal 108.5 BT, 4.5 LU). */
+/** Indeks grid 0,02° gabungan (asal 94.9 BT, 6.2 LU). */
 function cell([lon, lat]: LngLat) {
-  return { row: Math.round((4.5 - lat) / STEP - 0.5), col: Math.round((lon - 108.5) / STEP - 0.5) };
+  return { row: Math.round((ORIGIN[1] - lat) / STEP - 0.5), col: Math.round((lon - ORIGIN[0]) / STEP - 0.5) };
 }
 const pixelId = (p: LngLat) => { const { row, col } = cell(p); return `p${row}_${col}`; };
 
@@ -106,6 +139,7 @@ function buildSeries(nights: Night[], seed: number): SeriesPoint[] {
 
 interface ClusterDef {
   id: string;
+  province: ProvinceCode;
   pixels: LngLat[];
   attrs: Attributes;
   neighbours: Neighbour['state'][]; // urutan DIRS
@@ -125,10 +159,13 @@ function firstCalls(c: LngLat, asOf: string, ms: number) {
 const C002: LngLat[] = [[113.91, -2.21], [113.93, -2.21], [113.91, -2.23], [113.93, -2.19]];
 const C001: LngLat[] = [[114.13, -2.45], [114.15, -2.45], [114.13, -2.47]];
 const C923: LngLat[] = [[113.67, -2.05], [113.69, -2.05], [113.71, -2.05], [113.67, -2.07], [113.69, -2.07], [113.69, -2.03]];
+const C003: LngLat[] = [[105.61, -3.35], [105.63, -3.35], [105.65, -3.35], [105.61, -3.37], [105.63, -3.37]]; // OKI, Sumsel
+const C004: LngLat[] = [[102.75, 0.35], [102.77, 0.35], [102.75, 0.33]]; // Kampar, Riau
 
 const DEFS: ClusterDef[] = [
   {
     id: 'C-0924-002',
+    province: '62',
     pixels: C002,
     attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.5, u_SAT: 0.0, u_T: 0.67 },
     neighbours: ['normal', 'anomaly', 'non_peat', 'normal', 'anomaly', 'cloud', 'normal', 'anomaly'],
@@ -166,6 +203,7 @@ const DEFS: ClusterDef[] = [
   },
   {
     id: 'C-0924-001',
+    province: '62',
     pixels: C001,
     attrs: { u_H: 1.0, u_G: 0.85, u_LST: 0.4, u_SAT: 0.2, u_T: 1.0 },
     neighbours: ['normal', 'normal', 'normal', 'normal', 'anomaly', 'normal', 'anomaly', 'non_peat'],
@@ -200,6 +238,7 @@ const DEFS: ClusterDef[] = [
   },
   {
     id: 'C-0923-001',
+    province: '62',
     pixels: C923,
     attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.8, u_SAT: 0.5, u_T: 1.0 },
     neighbours: ['normal', 'anomaly', 'anomaly', 'normal', 'anomaly', 'normal', 'anomaly', 'normal'],
@@ -235,6 +274,82 @@ const DEFS: ClusterDef[] = [
       ],
     },
   },
+  {
+    id: 'C-0924-003',
+    province: '16',
+    pixels: C003,
+    attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.6, u_SAT: 0.4, u_T: 1.0 },
+    neighbours: ['anomaly', 'anomaly', 'normal', 'normal', 'anomaly', 'normal', 'anomaly', 'normal'],
+    trigger: AS_OF,
+    nights: [
+      { date: '2023-09-22', from: 0.35, to: 0.58, clouds: [[44, 47]] },
+      { date: '2023-09-23', from: 0.55, to: 0.78, peakAt: 30 },
+      { date: '2023-09-24', from: 0.7, to: 0.83, end: 13 },
+    ],
+    verification: {
+      result: 'strong_evidence', smoke_visible: true, viirs_within_2km_48h: 3, tool_calls: 5, at: '2023-09-24T15:16:00Z',
+      evidence: [
+        { source: 'rule_engine', finding: 'U 0,83; 4/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: AS_OF, age_h: 0 },
+        { source: 'viirs_firms', finding: '3 deteksi VIIRS ≤ 2 km (NOAA-20, S-NPP, NOAA-21) dalam 48 jam', observed_at: '2023-09-24T06:20:00Z', age_h: 8.8 },
+        { source: 'viirs_image', finding: 'Asap tebal menyebar ke barat laut dari sekitar penanda', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
+        { source: 'himawari_image', finding: 'Titik terang B07 meluas di penanda', observed_at: AS_OF, age_h: 0 },
+      ],
+      summary_id: 'Bukti kuat. Ada 3 deteksi VIIRS ≤ 2 km dalam 48 jam dan asap tebal terlihat di citra VIIRS 24 Sep, menyebar ke barat laut.',
+      summary_en: 'Strong evidence. There are 3 VIIRS detections within 2 km in 48 hours and thick smoke is visible in the 24 Sep VIIRS image, spreading north-west.',
+      tool_trace: [
+        ...firstCalls(C003[0], AS_OF, 2620),
+        { tool: 'fetch_viirs_image', args: { lat: -3.36, lon: 105.63, as_of: AS_OF }, duration_ms: 3380, ok: true },
+        { tool: 'fetch_himawari_image', args: { lat: -3.36, lon: 105.63, as_of: AS_OF, mode: 'thermal' }, duration_ms: 2810, ok: true },
+        { tool: 'save_verification', args: { result: 'strong_evidence', viirs_within_2km_48h: 3 }, duration_ms: 97, ok: true },
+      ],
+      images: [
+        { source: 'viirs_image', url: gibsUrl([105.63, -3.36], '2023-09-24'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7, marker_drawn: false },
+        { source: 'himawari_image', url: himawariSvg(0.95), layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
+      ],
+      viirs: [
+        { src: 'VIIRS_NOAA20_SP', time_utc: '2023-09-24T06:20:00Z', distance_km: 0.7, confidence: 'h', frp: 12.3, lat: -3.357, lon: 105.626 },
+        { src: 'VIIRS_SNPP_SP', time_utc: '2023-09-24T05:56:00Z', distance_km: 1.2, confidence: 'n', frp: 8.1, lat: -3.364, lon: 105.641 },
+        { src: 'VIIRS_NOAA21_NRT', time_utc: '2023-09-23T18:30:00Z', distance_km: 1.9, confidence: 'n', frp: 5.4, lat: -3.348, lon: 105.646 },
+      ],
+    },
+  },
+  {
+    id: 'C-0924-004',
+    province: '14',
+    pixels: C004,
+    attrs: { u_H: 0.95, u_G: 0.9, u_LST: 0.3, u_SAT: 0.0, u_T: 1.0 },
+    neighbours: ['normal', 'anomaly', 'normal', 'cloud', 'normal', 'normal', 'anomaly', 'normal'],
+    trigger: AS_OF,
+    nights: [
+      { date: '2023-09-22', from: 0.2, to: 0.34, clouds: [[10, 22]] },
+      { date: '2023-09-23', from: 0.3, to: 0.5 },
+      { date: '2023-09-24', from: 0.48, to: 0.69, end: 13, clouds: [[6, 8]] },
+    ],
+    verification: {
+      result: 'inconclusive', smoke_visible: null, viirs_within_2km_48h: 0, tool_calls: 5, at: '2023-09-24T15:17:00Z',
+      evidence: [
+        { source: 'rule_engine', finding: 'U 0,69; 2/8 tetangga U0 ≥ 0,5; Himawari + GK2A sepakat', observed_at: AS_OF, age_h: 0 },
+        { source: 'viirs_firms', finding: '1 deteksi VIIRS pada 6,3 km; tidak ada yang ≤ 2 km dalam 48 jam', observed_at: '2023-09-24T06:10:00Z', age_h: 9 },
+        { source: 'viirs_image', finding: 'Tertutup awan tebal; asap tidak bisa dinilai', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7 },
+        { source: 'himawari_image', finding: 'Titik hangat di penanda, sebagian tertutup awan', observed_at: AS_OF, age_h: 0 },
+      ],
+      summary_id: 'Inkonklusif. Deteksi VIIRS terdekat 6,3 km dan citra VIIRS 24 Sep tertutup awan tebal sehingga asap tidak bisa dinilai.',
+      summary_en: 'Inconclusive. The nearest VIIRS detection is 6.3 km away and the 24 Sep VIIRS image is under thick cloud, so smoke cannot be assessed.',
+      tool_trace: [
+        ...firstCalls(C004[0], AS_OF, 2190),
+        { tool: 'fetch_viirs_image', args: { lat: 0.34, lon: 102.76, as_of: AS_OF }, duration_ms: 3520, ok: true },
+        { tool: 'fetch_himawari_image', args: { lat: 0.34, lon: 102.76, as_of: AS_OF, mode: 'thermal' }, duration_ms: 2950, ok: true },
+        { tool: 'save_verification', args: { result: 'inconclusive', viirs_within_2km_48h: 0 }, duration_ms: 91, ok: true },
+      ],
+      images: [
+        { source: 'viirs_image', url: gibsUrl([102.76, 0.34], '2023-09-24'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7, marker_drawn: false },
+        { source: 'himawari_image', url: himawariSvg(0.4), layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
+      ],
+      viirs: [
+        { src: 'VIIRS_SNPP_SP', time_utc: '2023-09-24T06:10:00Z', distance_km: 6.3, confidence: 'l', frp: 2.2, lat: 0.39, lon: 102.81 },
+      ],
+    },
+  },
 ];
 
 const decisions = new Map<string, Decision>([
@@ -251,7 +366,7 @@ function toDetail(d: ClusterDef): ClusterDetail {
   return {
     id: d.id,
     state: 'active',
-    province: '62',
+    province: d.province,
     rep_pixel: pixelId(d.pixels[0]),
     centroid: centroid(d.pixels),
     pixels: d.pixels.map(pixelId),
@@ -280,7 +395,12 @@ function toSummary(d: ClusterDetail): ClusterSummary {
 
 // ---------- grid ----------
 
+const gridCache = new Map<Scenario, Grid>();
+
+/** Deterministik per skenario, jadi dihitung sekali. Pemanggil hanya membaca (api membungkus dengan structuredClone). */
 function buildGrid(sc: Scenario): Grid {
+  const hit = gridCache.get(sc);
+  if (hit) return hit;
   const clusterPx = new Map<string, { id: string; U: number }>();
   if (sc !== 'kosong') {
     for (const d of DEFS) {
@@ -295,42 +415,61 @@ function buildGrid(sc: Scenario): Grid {
   const near = (p: LngLat, dist: number) => allPx.some((q) => Math.abs(q[0] - p[0]) <= dist && Math.abs(q[1] - p[1]) <= dist);
 
   const features: Grid['features'] = [];
-  const rows = Math.round((BBOX.n - BBOX.s) / STEP);
-  const cols = Math.round((BBOX.e - BBOX.w) / STEP);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const p: LngLat = [r2(BBOX.w + (c + 0.5) * STEP), r2(BBOX.n - (r + 0.5) * STEP)];
-      if (!PEAT.some((ring) => inPoly(p, ring))) continue;
-      const { row, col } = cell(p);
-      const k = rand(row, col);
-      const cl = clusterPx.get(`${row}_${col}`);
-      const cloudy = sc === 'awan'
-        ? !near(p, 0.05) && rand(row, col, 7) < 0.85
-        : ((p[0] - 113.66) / 0.08) ** 2 + ((p[1] + 2.36) / 0.06) ** 2 <= 1;
-      let status: Status;
-      let U: number | null;
-      if (cl) {
-        U = cl.U;
-        status = sc === 'satu_satelit' ? 'WATCH' : 'AWAS'; // satu satelit: AWAS tidak mungkin
-      } else if (cloudy) {
-        status = 'NO_OBSERVATION'; U = null;
-      } else if ((near(p, 0.03) && k < 0.55) || k < 0.025) {
-        status = 'WATCH'; U = r2(T_WATCH + k * 0.5);
-      } else {
-        status = 'SAFE'; U = r2(k * 0.25);
+  for (const { row, col, code } of peatCells()) {
+    const p: LngLat = [r2(ORIGIN[0] + (col + 0.5) * STEP), r2(ORIGIN[1] - (row + 0.5) * STEP)];
+    const k = rand(row, col);
+    const cl = clusterPx.get(`${row}_${col}`);
+    const cloudy = sc === 'awan'
+      ? !near(p, 0.05) && rand(row, col, 7) < 0.85
+      : ((p[0] - 113.66) / 0.08) ** 2 + ((p[1] + 2.36) / 0.06) ** 2 <= 1 // Kalteng
+        || ((p[0] - 104.08) / 0.1) ** 2 + ((p[1] + 1.28) / 0.07) ** 2 <= 1; // Jambi
+    let status: Status;
+    let U: number | null;
+    if (cl) {
+      U = cl.U;
+      status = sc === 'satu_satelit' ? 'WATCH' : 'AWAS'; // satu satelit: AWAS tidak mungkin
+    } else if (cloudy) {
+      status = 'NO_OBSERVATION'; U = null;
+    } else if ((near(p, 0.03) && k < 0.55) || k < 0.025) {
+      status = 'WATCH'; U = r2(T_WATCH + k * 0.5);
+    } else {
+      status = 'SAFE'; U = r2(k * 0.25);
+    }
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: p },
+      properties: {
+        pixel_id: `p${row}_${col}`, status, utility: U,
+        n_sat: status === 'NO_OBSERVATION' ? 0 : sc === 'satu_satelit' ? 1 : 2,
+        cluster_id: cl?.id ?? null, province: code,
+      },
+    });
+  }
+  const grid: Grid = { type: 'FeatureCollection', features };
+  gridCache.set(sc, grid);
+  return grid;
+}
+
+let cellsCache: { row: number; col: number; code: ProvinceCode }[] | null = null;
+
+/** Semua sel grid yang pusatnya jatuh di area gambut fiktif, urut baris lalu kolom. */
+function peatCells() {
+  if (cellsCache) return cellsCache;
+  const out: { row: number; col: number; code: ProvinceCode }[] = [];
+  for (const { code, rings } of AREAS) {
+    const pts = rings.flat();
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const c0 = Math.floor((Math.min(...xs) - ORIGIN[0]) / STEP), c1 = Math.ceil((Math.max(...xs) - ORIGIN[0]) / STEP);
+    const r0 = Math.floor((ORIGIN[1] - Math.max(...ys)) / STEP), r1 = Math.ceil((ORIGIN[1] - Math.min(...ys)) / STEP);
+    for (let row = r0; row <= r1; row++) {
+      for (let col = c0; col <= c1; col++) {
+        const p: LngLat = [ORIGIN[0] + (col + 0.5) * STEP, ORIGIN[1] - (row + 0.5) * STEP];
+        if (rings.some((ring) => inPoly(p, ring))) out.push({ row, col, code });
       }
-      features.push({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: p },
-        properties: {
-          pixel_id: `p${row}_${col}`, status, utility: U,
-          n_sat: status === 'NO_OBSERVATION' ? 0 : sc === 'satu_satelit' ? 1 : 2,
-          cluster_id: cl?.id ?? null, province: '62',
-        },
-      });
     }
   }
-  return { type: 'FeatureCollection', features };
+  out.sort((a, b) => a.row - b.row || a.col - b.col);
+  return (cellsCache = out);
 }
 
 function buildMeta(sc: Scenario): Meta {
@@ -359,7 +498,7 @@ function buildPixels(): PixelIndex {
     const { row, col } = cell(f.geometry.coordinates as LngLat);
     rows.push(row); cols.push(col);
   }
-  return { version: PIXELS_VERSION, origin: [108.5, 4.5], step: STEP, rows, cols, province: '2'.repeat(rows.length) };
+  return { version: PIXELS_VERSION, origin: ORIGIN, step: STEP, rows, cols, province: grid.features.map((f) => Number(f.properties.province)) };
 }
 
 function clustersOf(grid: Grid): Record<string, number[]> {
@@ -446,7 +585,7 @@ export const mockApi: Api = {
   night: (night) => wait(buildNight(currentScenario(), night), 300),
   basemaps: () => wait(buildBasemaps(), 100),
   provinces: async () => {
-    const r = await fetch(`${import.meta.env.BASE_URL}mock/provinces-kalimantan.geojson`);
+    const r = await fetch(`${import.meta.env.BASE_URL}mock/provinces.geojson`);
     return (await r.json()) as ProvinceBoundary;
   },
   clusters: () => {
@@ -475,7 +614,7 @@ export const mockApi: Api = {
   },
   peatBoundary: () => wait<PeatBoundary>({
     type: 'FeatureCollection',
-    features: PEAT.map((ring) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } })),
+    features: AREAS.flatMap((a) => a.rings.map((ring) => ({ type: 'Feature' as const, properties: { code: a.code }, geometry: { type: 'Polygon' as const, coordinates: [ring] } }))),
   }, 100),
 };
 
@@ -494,6 +633,6 @@ export function contractExamples() {
     basemaps: buildBasemaps(),
     clusters: [toSummary(detail('C-0923-001')), toSummary(detail('C-0924-001'))],
     cluster: detail('C-0924-002'),
-    peat: { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [PEAT[1]] } }] },
+    peat: { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [AREAS[0].rings[0]] } }] },
   };
 }

@@ -7,7 +7,7 @@ import { useLoad } from '../lib/useLoad';
 import { fmtNum } from '../lib/format';
 import { load, save } from '../lib/storage';
 import { detectLite, loadLitePref, saveLitePref } from '../lib/device';
-import { KALIMANTAN, PROVINCES, PROVINCE_CODES } from '../lib/provinces';
+import { ISLANDS, PROVINCES, REGION, provincesOf } from '../lib/provinces';
 import {
   STATUS_CODE, cellAt, cellByPixelId, cellCenter, decodeUtility, nightOf, nightStart, slotIndex, utilityAt,
 } from '../lib/grid';
@@ -107,7 +107,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
   }, [layers]);
   useEffect(() => {
     ctl.current?.setProvince(province);
-    ctl.current?.fitBounds(province ? PROVINCES[province].bounds : KALIMANTAN);
+    ctl.current?.fitBounds(province ? PROVINCES[province].bounds : REGION);
   }, [province]);
 
   // Titik VIIRS hanya untuk kelompok terpilih (bukti verifikasi, bukan ingest berkala).
@@ -184,7 +184,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
         let a = Number(m[1]), b = Number(m[2]);
         if (Math.abs(a) > Math.abs(b)) [a, b] = [b, a]; // terima "lat, lon" maupun "lon, lat"
         const [lat, lon] = [a, b];
-        const [[w, s], [e2, n]] = KALIMANTAN;
+        const [[w, s], [e2, n]] = REGION;
         if (lon < w || lon > e2 || lat < s || lat > n) { setCell(-1); setSearchMsg(t('search.outside')); return; }
         const i = cellAt(index, lon, lat);
         if (i >= 0) focusCell(i);
@@ -240,7 +240,11 @@ export function PetaOperator({ dark }: { dark: boolean }) {
             <span className="lbl">{t('map.filter_province')}</span>
             <select value={province} onChange={(e) => setProvince(e.target.value as ProvinceCode | '')}>
               <option value="">{t('map.all_provinces')}</option>
-              {PROVINCE_CODES.map((p) => <option key={p} value={p}>{t(`prov.${p}`)}</option>)}
+              {ISLANDS.map((isl) => (
+                <optgroup key={isl} label={t(`island.${isl}`)}>
+                  {provincesOf(isl).map((p) => <option key={p} value={p}>{t(`prov.${p}`)}</option>)}
+                </optgroup>
+              ))}
             </select>
           </label>
         </div>

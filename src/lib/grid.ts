@@ -43,7 +43,7 @@ export function cellCenter(ix: PixelIndex, i: number): LngLat {
 }
 
 export const pixelIdOf = (ix: PixelIndex, i: number) => `p${ix.rows[i]}_${ix.cols[i]}`;
-export const provinceOf = (ix: PixelIndex, i: number) => `6${ix.province[i]}` as ProvinceCode;
+export const provinceOf = (ix: PixelIndex, i: number) => String(ix.province[i]) as ProvinceCode;
 
 const lookups = new WeakMap<PixelIndex, Map<number, number>>();
 function lookup(ix: PixelIndex) {

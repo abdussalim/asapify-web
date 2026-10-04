@@ -5,7 +5,10 @@ import type { FeatureCollection, MultiPolygon, Point, Polygon } from 'geojson';
 
 export type Status = 'SAFE' | 'NO_OBSERVATION' | 'WATCH' | 'AWAS';
 export type EvidenceResult = 'strong_evidence' | 'inconclusive';
-export type ProvinceCode = '61' | '62' | '63' | '64' | '65';
+// Kode BPS: 10 provinsi Sumatra + 5 provinsi Kalimantan.
+export type ProvinceCode =
+  | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '21'
+  | '61' | '62' | '63' | '64' | '65';
 export type LngLat = [number, number]; // GeoJSON: [lon, lat]
 
 export interface SatState {
@@ -141,11 +144,11 @@ export interface DecisionRequest {
 /** Daftar piksel gambut statis; urutannya = indeks sel di semua respons ringkas. */
 export interface PixelIndex {
   version: string;
-  origin: LngLat; // pojok kiri atas grid: [108.5, 4.5]
+  origin: LngLat; // pojok kiri atas grid gabungan Sumatra + Kalimantan: [94.9, 6.2]
   step: number; // 0.02
   rows: number[];
   cols: number[];
-  province: string; // satu digit per sel = digit terakhir kode BPS ('1' → 61 … '5' → 65)
+  province: number[]; // kode BPS provinsi per sel, mis. 16 = Sumatera Selatan
 }
 
 export type StatusCode = 'S' | 'N' | 'W' | 'A';

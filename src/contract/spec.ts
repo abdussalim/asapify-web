@@ -42,6 +42,7 @@ const t = (id: string, en: string): Txt => ({ id, en });
 
 export const STATUS_T = "'SAFE' | 'NO_OBSERVATION' | 'WATCH' | 'AWAS'";
 const ISO = 'string · ISO 8601 UTC';
+export const PROV_T = "'11' … '19' | '21' | '61' … '65'";
 
 export const CONVENTIONS: { title: Txt; body: Txt }[] = [
   {
@@ -75,8 +76,8 @@ export const CONVENTIONS: { title: Txt; body: Txt }[] = [
   {
     title: t('Koordinat', 'Coordinates'),
     body: t(
-      'GeoJSON selalu `[lon, lat]`. Field angka terpisah ditulis eksplisit (`lat`, `lon`). Grid 0,02° Kalimantan; `pixel_id` = `p{baris}_{kolom}` dari asal 108,5° BT / 4,5° LU.',
-      'GeoJSON is always `[lon, lat]`. Separate numeric fields are explicit (`lat`, `lon`). 0.02° Kalimantan grid; `pixel_id` = `p{row}_{col}` from origin 108.5° E / 4.5° N.',
+      'GeoJSON selalu `[lon, lat]`. Field angka terpisah ditulis eksplisit (`lat`, `lon`). Satu grid 0,02° untuk Sumatra + Kalimantan; `pixel_id` = `p{baris}_{kolom}` dari asal 94,9° BT / 6,2° LU. Provinsi = kode BPS (11–19, 21 Sumatra; 61–65 Kalimantan).',
+      'GeoJSON is always `[lon, lat]`. Separate numeric fields are explicit (`lat`, `lon`). One 0.02° grid for Sumatra + Kalimantan; `pixel_id` = `p{row}_{col}` from origin 94.9° E / 6.2° N. Province = BPS code (11–19, 21 Sumatra; 61–65 Kalimantan).',
     ),
   },
   {
@@ -160,19 +161,19 @@ export const SCHEMAS: Schema[] = [
       { name: 'properties.utility', type: 'number 0–1 | null', req: true, desc: t('U; null bila NO_OBSERVATION.', 'U; null when NO_OBSERVATION.') },
       { name: 'properties.n_sat', type: '0 | 1 | 2', req: true, desc: t('Satelit cerah untuk piksel ini.', 'Clear-sky satellites for this pixel.') },
       { name: 'properties.cluster_id', type: 'string | null', req: true, origin: 'fe', desc: t('ID kelompok AWAS aktif bila piksel anggota; UI menggambar garis kelompok dari sini.', 'Active AWAS cluster id if the pixel is a member; the UI draws cluster outlines from it.') },
-      { name: 'properties.province', type: "'61' | '62' | '63' | '64' | '65'", req: true, origin: 'fe', desc: t('Kode BPS provinsi; dipakai filter provinsi.', 'BPS province code; used by the province filter.') },
+      { name: 'properties.province', type: PROV_T, req: true, origin: 'fe', desc: t('Kode BPS provinsi; dipakai filter provinsi.', 'BPS province code; used by the province filter.') },
     ],
   },
   {
     name: 'PixelIndex', origin: 'fe',
-    desc: t('Daftar piksel gambut statis, diunduh sekali per versi (cache lewat ETag). Urutannya = indeks sel di GridCompact dan NightCompact. Kalimantan ±10 ribu sel ≈ 90 KB mentah, jauh lebih kecil setelah gzip.', 'Static peat pixel list, downloaded once per version (cache via ETag). Its order = the cell index in GridCompact and NightCompact. Kalimantan ≈ 10k cells ≈ 90 KB raw, far smaller once gzipped.'),
+    desc: t('Daftar piksel gambut statis, diunduh sekali per versi (cache lewat ETag). Urutannya = indeks sel di GridCompact dan NightCompact. Per 10 ribu sel ≈ 120 KB mentah, jauh lebih kecil setelah gzip.', 'Static peat pixel list, downloaded once per version (cache via ETag). Its order = the cell index in GridCompact and NightCompact. Per 10k cells ≈ 120 KB raw, far smaller once gzipped.'),
     fields: [
       { name: 'version', type: 'string', req: true, desc: t('Berubah hanya bila peat mask dibangun ulang (asapify-build).', 'Changes only when the peat mask is rebuilt (asapify-build).') },
-      { name: 'origin', type: '[lon, lat]', req: true, desc: t('Pojok kiri atas grid: [108.5, 4.5].', 'Grid top-left corner: [108.5, 4.5].') },
+      { name: 'origin', type: '[lon, lat]', req: true, desc: t('Pojok kiri atas grid gabungan: [94.9, 6.2].', 'Top-left corner of the combined grid: [94.9, 6.2].') },
       { name: 'step', type: 'number', req: true, desc: t('Ukuran sel derajat: 0.02.', 'Cell size in degrees: 0.02.') },
       { name: 'rows', type: 'integer[]', req: true, desc: t('Baris tiap sel (dari utara).', 'Row of each cell (from the north).') },
       { name: 'cols', type: 'integer[]', req: true, desc: t('Kolom tiap sel (dari barat).', 'Column of each cell (from the west).') },
-      { name: 'province', type: 'string', req: true, desc: t('Satu digit per sel = digit terakhir kode BPS (`2` → 62).', 'One digit per cell = last digit of the BPS code (`2` → 62).') },
+      { name: 'province', type: 'integer[]', req: true, desc: t('Kode BPS provinsi per sel, mis. 16 = Sumatera Selatan, 62 = Kalimantan Tengah.', 'BPS province code per cell, e.g. 16 = South Sumatra, 62 = Central Kalimantan.') },
     ],
   },
   {
@@ -213,9 +214,9 @@ export const SCHEMAS: Schema[] = [
   },
   {
     name: 'ProvinceBoundary', origin: 'fe',
-    desc: t('Berkas statis `layers/provinces.geojson` di bucket publik (bukan endpoint API): 5 provinsi Kalimantan, disederhanakan ±35 KB. Sumber geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).', 'Static file `layers/provinces.geojson` in the public bucket (not an API endpoint): the 5 Kalimantan provinces, simplified ≈ 35 KB. Source geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).'),
+    desc: t('Berkas statis `layers/provinces.geojson` di bucket publik (bukan endpoint API): 15 provinsi Sumatra + Kalimantan, disederhanakan ±90 KB (±30 KB gzip). Sumber geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).', 'Static file `layers/provinces.geojson` in the public bucket (not an API endpoint): the 15 Sumatra + Kalimantan provinces, simplified ≈ 90 KB (≈ 30 KB gzip). Source geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).'),
     fields: [
-      { name: 'features[].properties.code', type: "'61' … '65'", req: true, desc: t('Kode BPS provinsi.', 'BPS province code.') },
+      { name: 'features[].properties.code', type: PROV_T, req: true, desc: t('Kode BPS provinsi.', 'BPS province code.') },
       { name: 'features[].properties.name', type: 'string', req: true, desc: t('Nama provinsi (label peta).', 'Province name (map label).') },
       { name: 'features[].geometry', type: 'MultiPolygon', req: true, desc: t('Batas provinsi.', 'Province boundary.') },
     ],
@@ -226,7 +227,7 @@ export const SCHEMAS: Schema[] = [
     fields: [
       { name: 'id', type: 'string', req: true, desc: t('`C-{MMDD}-{nnn}`; tetap sama selama kelompok tumpang tindih dengan yang aktif.', '`C-{MMDD}-{nnn}`; kept while it overlaps an active cluster.') },
       { name: 'state', type: "'active' | 'closed'", req: true, desc: t('Ditutup setelah 3 malam valid tanpa piksel AWAS.', 'Closed after 3 valid nights without AWAS pixels.') },
-      { name: 'province', type: "'61' … '65'", req: true, desc: t('Provinsi piksel perwakilan; menentukan grup Telegram.', 'Province of the representative pixel; selects the Telegram group.') },
+      { name: 'province', type: PROV_T, req: true, desc: t('Provinsi piksel perwakilan; menentukan grup Telegram.', 'Province of the representative pixel; selects the Telegram group.') },
       { name: 'rep_pixel', type: 'string', req: true, desc: t('pixel_id dengan U tertinggi.', 'pixel_id with the highest U.') },
       { name: 'centroid', type: '[lon, lat]', req: true, desc: t('Titik tengah kelompok; target zoom peta dan caption.', 'Cluster centre; map zoom target and caption.') },
       { name: 'pixels', type: 'string[]', req: true, desc: t('Semua pixel_id anggota.', 'All member pixel_ids.') },
@@ -386,7 +387,7 @@ export const SCHEMAS: Schema[] = [
     fields: [
       { name: 'id', type: 'string', req: true, desc: t('`A-{MMDD}-{nnn}`.', '`A-{MMDD}-{nnn}`.') },
       { name: 'cluster_id', type: 'string', req: true, desc: t('Kelompok asal.', 'Source cluster.') },
-      { name: 'province', type: "'61' … '65'", req: true, desc: t('Grup peringatan tujuan.', 'Target alert group.') },
+      { name: 'province', type: PROV_T, req: true, desc: t('Grup peringatan tujuan.', 'Target alert group.') },
       { name: 'caption_id', type: 'string', req: true, desc: t('Caption yang terkirim (atau terakhir disunting).', 'Caption sent (or last edited).') },
       { name: 'published_by', type: 'string (email)', req: true, desc: t('Operator penerbit.', 'Publishing operator.') },
       { name: 'published_at', type: ISO, req: true, desc: t('Waktu terbit.', 'Publish time.') },
@@ -407,7 +408,7 @@ export const SCHEMAS: Schema[] = [
     name: 'PeatBoundary', origin: 'backend',
     desc: t('Berkas statis `layers/peat_pixels.geojson` di bucket publik (bukan endpoint API).', 'Static file `layers/peat_pixels.geojson` in the public bucket (not an API endpoint).'),
     fields: [
-      { name: 'features[].geometry', type: 'Polygon | MultiPolygon', req: true, desc: t('Batas gambut yang diproses (KHG ∩ 5 provinsi − area terbangun), sudah disederhanakan.', 'Processed peat boundary (KHG ∩ 5 provinces − built-up), simplified.') },
+      { name: 'features[].geometry', type: 'Polygon | MultiPolygon', req: true, desc: t('Batas gambut yang diproses (KHG ∩ 15 provinsi − area terbangun), sudah disederhanakan.', 'Processed peat boundary (KHG ∩ 15 provinces − built-up), simplified.') },
     ],
   },
   {
@@ -454,7 +455,7 @@ export const ENDPOINTS: Endpoint[] = [
     params: [
       AS_OF_PARAM,
       { name: 'format', type: "query · 'geojson' | 'compact'", req: false, origin: 'fe', desc: t('Default geojson. UI selalu mengirim compact.', 'Default geojson. The UI always sends compact.') },
-      { name: 'province', type: "query · '61' … '65'", req: false, origin: 'fe', desc: t('Hanya untuk geojson (opsional); UI memfilter di klien.', 'geojson only (optional); the UI filters client-side.') },
+      { name: 'province', type: `query · ${PROV_T}`, req: false, origin: 'fe', desc: t('Hanya untuk geojson (opsional); UI memfilter di klien.', 'geojson only (optional); the UI filters client-side.') },
     ],
     responses: [
       { code: 200, schema: 'GridCompact', example: 'gridCompact', note: t('format=compact. String panjang dipotong di contoh.', 'format=compact. Long strings are trimmed in the example.') },
