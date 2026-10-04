@@ -24,6 +24,10 @@ export function Tentang() {
   return (
     <div className="wrap about">
       <header className="about-head">
+        <div className="dict" aria-label={`asap: ${t('about.dict_en')}`}>
+          <p className="dict-word">asap <span className="dict-pron">{t('about.dict_pron')}</span> <i>{t('about.dict_pos')}</i></p>
+          <p className="dict-def">{t('about.dict_def')} <span className="dict-en">EN: {t('about.dict_en')}</span></p>
+        </div>
         <span className="eyebrow">{t('about.eyebrow')}</span>
         <h1>{t('about.title')}</h1>
         <p className="lede">{t('about.lede')}</p>

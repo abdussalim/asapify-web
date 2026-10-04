@@ -16,7 +16,7 @@ import { SatelliteAgree } from '../components/SatelliteAgree';
 import { EvidenceImage } from '../components/EvidenceImage';
 import { ViirsList } from '../components/ViirsList';
 import { ToolTrace } from '../components/ToolTrace';
-import { DecisionPanel } from '../components/DecisionPanel';
+import { DecisionPanel, DecisionState } from '../components/DecisionPanel';
 import { IconAlert, IconArrowLeft } from '../components/icons';
 
 export function Kelompok() {
@@ -66,6 +66,13 @@ export function Kelompok() {
           {t(`prov.${c.province}`)} · {fmtCoord(lon, lat)} · {t('cluster.pixels', { n: c.pixels.length })} ·{' '}
           {t('cluster.trigger', { slot: fmtSlot(c.trigger_slot, lang) })}
         </p>
+        <dl className="facts">
+          <div className="hot"><dt>{t('cluster.f_utility')}</dt><dd>{fmtNum(c.utility_score, 2, lang)}</dd></div>
+          <div><dt>{t('cluster.f_nbr')}</dt><dd>{Math.round(c.neighbour_support * 8)}/8</dd></div>
+          <div><dt>{t('cluster.f_sat')}</dt><dd>{c.n_sat}/2</dd></div>
+          <div><dt>{t('cluster.f_ver')}</dt><dd><EvidenceBadge result={v?.result ?? null} /></dd></div>
+          <div><dt>{t('cluster.f_dec')}</dt><dd><DecisionState decision={c.decision} /></dd></div>
+        </dl>
         <p className="callout"><IconAlert size={14} /> {t('awas.note')}</p>
       </header>
 

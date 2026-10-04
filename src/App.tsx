@@ -9,6 +9,7 @@ import { Masuk } from './pages/Masuk';
 import { PetaOperator } from './pages/PetaOperator';
 import { Kelompok } from './pages/Kelompok';
 import { Tentang } from './pages/Tentang';
+import { KontrakApi } from './pages/KontrakApi';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = useUser();
@@ -33,6 +34,9 @@ function TopBar({ theme }: { theme: ReturnType<typeof useTheme> }) {
         <nav className="navlinks" aria-label="Navigasi">
           {user && <NavLink to="/" end>{t('nav.map')}</NavLink>}
           <NavLink to="/tentang">{t('nav.about')}</NavLink>
+          <NavLink to="/kontrak-api">
+            <span className="nl-full">{t('nav.api')}</span><span className="nl-short">{t('nav.api_short')}</span>
+          </NavLink>
         </nav>
         <div className="tools">
           <div className="seg" role="group" aria-label={t('lang.switch')}>
@@ -72,6 +76,7 @@ function Root() {
       <Route element={<Shell theme={theme} />}>
         <Route path="/masuk" element={<Masuk />} />
         <Route path="/tentang" element={<Tentang />} />
+        <Route path="/kontrak-api" element={<KontrakApi />} />
         <Route path="/" element={<RequireAuth><PetaOperator dark={theme.dark} /></RequireAuth>} />
         <Route path="/kelompok/:id" element={<RequireAuth><Kelompok /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -18,10 +18,11 @@ export const EMPTY: MapData = {
   viirs: [],
 };
 
-interface Palette { safe: string; watch: string; awas: string; ink: string; halo: string; sat: string; hatch: string }
+// Aman sengaja nyaris transparan: peta harus tenang supaya AWAS langsung terlihat.
+interface Palette { safe: string; safeOp: number; watch: string; awas: string; ink: string; halo: string; sat: string; hatch: string }
 const PALETTE: Record<'light' | 'dark', Palette> = {
-  light: { safe: '#dbe8dd', watch: '#f0c46a', awas: '#c2410c', ink: '#1b2520', halo: '#ffffff', sat: '#2c628c', hatch: '#8d988f' },
-  dark: { safe: '#2f5a3c', watch: '#c9952e', awas: '#ea580c', ink: '#e4ebe5', halo: '#121815', sat: '#7fb3dc', hatch: '#6d7a72' },
+  light: { safe: '#3c6a4c', safeOp: 0.16, watch: '#f0c46a', awas: '#c2410c', ink: '#1b2520', halo: '#ffffff', sat: '#2c628c', hatch: '#7d887f' },
+  dark: { safe: '#7fbf93', safeOp: 0.13, watch: '#e0a93e', awas: '#f26b2f', ink: '#e4ebe5', halo: '#121815', sat: '#7fb3dc', hatch: '#7d8b83' },
 };
 
 // ---------- konversi data ----------
@@ -112,7 +113,6 @@ export const CLICKABLE = ['pixel-status', 'pixel-noobs'];
 export function installLayers(map: MlMap, dark: boolean, data: MapData) {
   const p = PALETTE[dark ? 'dark' : 'light'];
   addImages(map, p);
-  const firstSymbol = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
   const { outlines, labels } = clusterBoxes(data.grid);
 
   map.addSource('pixels', { type: 'geojson', data: squares(data.grid) });
@@ -123,24 +123,36 @@ export function installLayers(map: MlMap, dark: boolean, data: MapData) {
   map.addSource('viirs', { type: 'geojson', data: viirsPoints(data.viirs) });
 
   const color: ExpressionSpecification = ['match', ['get', 'status'], 'AWAS', p.awas, 'WATCH', p.watch, p.safe];
+  const opacity: ExpressionSpecification = ['match', ['get', 'status'], 'AWAS', 0.95, 'WATCH', 0.8, p.safeOp];
 
+  // Layer data di atas seluruh basemap: label kota tetap terbaca lewat Aman yang transparan,
+  // tetapi tertutup oleh piksel AWAS.
   map.addLayer({
     id: 'pixel-status', type: 'fill', source: 'pixels',
     filter: ['!=', ['get', 'status'], 'NO_OBSERVATION'],
-    paint: { 'fill-color': color, 'fill-opacity': 0.85, 'fill-outline-color': p.halo },
-  }, firstSymbol);
+    paint: { 'fill-color': color, 'fill-opacity': opacity },
+  });
   map.addLayer({
     id: 'pixel-noobs', type: 'fill', source: 'pixels',
     filter: ['==', ['get', 'status'], 'NO_OBSERVATION'],
-    paint: { 'fill-pattern': 'hatch', 'fill-opacity': 0.9 },
-  }, firstSymbol);
+    paint: { 'fill-pattern': 'hatch', 'fill-opacity': 0.7 },
+  });
+  map.addLayer({
+    id: 'pixel-grid', type: 'line', source: 'pixels', minzoom: 9,
+    paint: { 'line-color': p.ink, 'line-width': 0.4, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0, 11, 0.18] },
+  });
+  map.addLayer({
+    id: 'pixel-glow', type: 'line', source: 'pixels',
+    filter: ['==', ['get', 'status'], 'AWAS'],
+    paint: { 'line-color': p.awas, 'line-width': 7, 'line-blur': 6, 'line-opacity': 0.55 },
+  });
   map.addLayer({
     id: 'peat-boundary', type: 'line', source: 'peat',
-    paint: { 'line-color': p.ink, 'line-width': 1, 'line-dasharray': [3, 2], 'line-opacity': 0.55 },
-  }, firstSymbol);
+    paint: { 'line-color': p.ink, 'line-width': 1, 'line-dasharray': [3, 2], 'line-opacity': 0.5 },
+  });
   map.addLayer({
     id: 'clusters', type: 'line', source: 'clusters',
-    paint: { 'line-color': p.ink, 'line-width': 2.2, 'line-dasharray': [2, 1.5] },
+    paint: { 'line-color': p.ink, 'line-width': 1.8, 'line-dasharray': [2.5, 1.5] },
   });
   map.addLayer({
     id: 'clusters-selected', type: 'line', source: 'clusters',
@@ -159,10 +171,10 @@ export function installLayers(map: MlMap, dark: boolean, data: MapData) {
   map.addLayer({
     id: 'clusters-label', type: 'symbol', source: 'cluster-labels',
     layout: {
-      'text-field': ['get', 'id'], 'text-font': ['Noto Sans Regular'], 'text-size': 12,
-      'text-anchor': 'bottom', 'text-offset': [0, -0.3], 'text-allow-overlap': true,
+      'text-field': ['get', 'id'], 'text-font': ['Noto Sans Bold'], 'text-size': 12,
+      'text-anchor': 'bottom', 'text-offset': [0, -0.4], 'text-allow-overlap': true, 'text-letter-spacing': 0.04,
     },
-    paint: { 'text-color': p.ink, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
+    paint: { 'text-color': p.ink, 'text-halo-color': p.halo, 'text-halo-width': 2 },
   });
   map.addLayer({
     id: 'viirs', type: 'circle', source: 'viirs', minzoom: 9,
@@ -192,6 +204,8 @@ export function applyFilter(map: MlMap, statuses: Status[], province: ProvinceCo
   map.setFilter('pixel-status', ['all', ['!=', ['get', 'status'], 'NO_OBSERVATION'], st, prov]);
   map.setFilter('pixel-noobs', ['all', ['==', ['get', 'status'], 'NO_OBSERVATION'], st, prov]);
   map.setFilter('pixel-icons', ['all', ['in', ['get', 'status'], ['literal', ['AWAS', 'WATCH']]], st, prov]);
+  map.setFilter('pixel-glow', ['all', ['==', ['get', 'status'], 'AWAS'], st, prov]);
+  map.setFilter('pixel-grid', ['all', st, prov]);
   map.setFilter('clusters', prov);
   map.setFilter('clusters-label', prov);
   map.setFilter('clusters-selected', ['==', ['get', 'id'], selected ?? '']);

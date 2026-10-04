@@ -48,17 +48,15 @@ Keputusan disimpan di memori dan hilang saat halaman dimuat ulang. Login hanya t
 Keadaan layar bisa didemokan dengan `?skenario=` (diingat selama tab terbuka):
 `normal` · `kosong` · `awan` · `satu_satelit` · `siang`.
 
-## Usulan FE untuk kontrak API
+## Kontrak API untuk tim BE
 
-Field berikut dipakai FE tetapi belum dirinci di `backend.html` (bertanda `FE` di `src/types.ts`):
+Buka tab **Kontrak API** di aplikasi (`/kontrak-api`, publik, ID/EN). Isinya: konvensi (auth, waktu UTC,
+`as_of`, koordinat, galat), tabel kode galat, 9 endpoint `asapify-api` (parameter, body, respons, galat,
+layar UI yang memakainya), 23 skema, dan endpoint internal `asapify-agent`. Contoh JSON diambil dari
+fixture mock yang sama dengan UI, jadi tidak bisa berbeda dari tampilan.
 
-- `GET /operator/clusters/{id}`: `neighbours[]` (`dir`, `state`, `u0`), `verification.evidence[]`,
-  `summary_id/en`, `smoke_visible`, `tool_trace[]` (`tool`, `args`, `duration_ms`, `ok`),
-  `images[]` (`source`, `url`, `layer`, `observed_at`, `age_h`, `marker_drawn`),
-  `viirs[]` (+ `lat`, `lon` untuk layer peta); `series[].U = null` untuk slot `NO_OBSERVATION`.
-- `GET /operator/clusters?state=active` diasumsikan mengembalikan array langsung.
-- `decision`: `{action, by, at, reason, alert_id}`. Setelah `POST …/decision` FE memuat ulang detail.
-- `GET /meta`: `{as_of, last_slot, is_night, replay, n_sat, sats: {himawari, gk2a: {last_slot, delay_min}}}`.
+Sumber datanya `src/contract/spec.ts` (tipe TypeScript tetap di `src/types.ts`). Field bertanda
+**usulan FE** belum ada di `backend.html` dan perlu disepakati tim BE.
 
 ## Catatan teknis
 

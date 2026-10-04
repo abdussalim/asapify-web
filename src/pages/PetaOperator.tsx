@@ -147,11 +147,17 @@ export function PetaOperator({ dark }: { dark: boolean }) {
         ) : (
           <ul className="queue">
             {visible.map((c) => (
-              <li key={c.id} className={`queue-item ${selected === c.id ? 'on' : ''}`}>
+              <li key={c.id} className={`queue-item ${selected === c.id ? 'on' : ''} ${c.decision ? 'is-decided' : ''}`}>
                 <button className="qi-main" onClick={() => select(c.id, c.centroid)} aria-pressed={selected === c.id}>
-                  <span className="qi-row"><StatusBadge status="AWAS" /><b className="mono">{c.id}</b></span>
+                  <span className="qi-top">
+                    <b className="qi-id">{c.id}</b>
+                    <span className="qi-u" aria-label={`Utility ${fmtNum(c.utility_score, 2, lang)}`}>
+                      <small>U</small>{fmtNum(c.utility_score, 2, lang)}
+                      <i style={{ ['--u' as string]: c.utility_score }} />
+                    </span>
+                  </span>
                   <span className="qi-row muted">
-                    {t(`prov.${c.province}`)} · {t('map.pixels', { n: c.pixels.length })} · U {fmtNum(c.utility_score, 2, lang)}
+                    {t(`prov.${c.province}`)} · {t('map.pixels', { n: c.pixels.length })} · {t('map.nbr', { k: Math.round(c.neighbour_support * 8) })}
                   </span>
                   <span className="qi-row"><EvidenceBadge result={c.verification?.result ?? null} /><DecisionState decision={c.decision} /></span>
                 </button>

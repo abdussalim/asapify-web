@@ -398,3 +398,18 @@ export const mockApi: Api = {
     features: PEAT.map((ring) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } })),
   }, 100),
 };
+
+/** Contoh respons untuk tab Kontrak API — dari data yang sama dengan UI (skenario normal). */
+export function contractExamples() {
+  const grid = buildGrid('normal');
+  const pick = (s: Status) => grid.features.find((f) => f.properties.status === s)!;
+  const detail = (id: string) => toDetail(DEFS.find((d) => d.id === id)!);
+  return {
+    meta: buildMeta('normal'),
+    grid: { type: 'FeatureCollection' as const, features: [pick('AWAS'), pick('NO_OBSERVATION')] },
+    gridCount: grid.features.length,
+    clusters: [toSummary(detail('C-0923-001')), toSummary(detail('C-0924-001'))],
+    cluster: detail('C-0924-002'),
+    peat: { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [PEAT[1]] } }] },
+  };
+}
