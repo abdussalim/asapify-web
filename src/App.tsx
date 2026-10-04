@@ -1,15 +1,21 @@
-import type { ReactNode } from 'react';
+import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { I18nProvider, useI18n } from './i18n';
 import { signOut, useUser } from './auth';
 import { useTheme } from './lib/theme';
 import { API_MODE } from './api';
-import { currentScenario } from './mock/fixtures';
+import { currentScenario } from './mock/scenario';
 import { Masuk } from './pages/Masuk';
-import { PetaOperator } from './pages/PetaOperator';
 import { Kelompok } from './pages/Kelompok';
 import { Tentang } from './pages/Tentang';
-import { KontrakApi } from './pages/KontrakApi';
+
+// MapLibre (±230 KB gzip) dan teks kontrak hanya dimuat di rutenya sendiri.
+const PetaOperator = lazy(() => import('./pages/PetaOperator').then((m) => ({ default: m.PetaOperator })));
+const KontrakApi = lazy(() => import('./pages/KontrakApi').then((m) => ({ default: m.KontrakApi })));
+
+function PageFallback() {
+  return <div className="page-fallback" aria-busy="true"><div className="skel" /></div>;
+}
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = useUser();
@@ -63,7 +69,9 @@ function Shell({ theme }: { theme: ReturnType<typeof useTheme> }) {
     <>
       <TopBar theme={theme} />
       <main className={loc.pathname === '/' ? 'main-map' : 'main'}>
-        <Outlet />
+        <Suspense fallback={<PageFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
     </>
   );

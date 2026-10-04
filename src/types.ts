@@ -1,4 +1,4 @@
-import type { FeatureCollection, Point, Polygon } from 'geojson';
+import type { FeatureCollection, MultiPolygon, Point, Polygon } from 'geojson';
 
 // Bentuk data mengikuti backend.html bagian 03–05. Field bertanda "FE" adalah
 // usulan FE untuk isi GET /operator/clusters/{id} yang belum dirinci di sana.
@@ -136,13 +136,62 @@ export interface DecisionRequest {
   reason: string | null;
 }
 
+// ---------- format ringkas peta (usulan FE) ----------
+
+/** Daftar piksel gambut statis; urutannya = indeks sel di semua respons ringkas. */
+export interface PixelIndex {
+  version: string;
+  origin: LngLat; // pojok kiri atas grid: [108.5, 4.5]
+  step: number; // 0.02
+  rows: number[];
+  cols: number[];
+  province: string; // satu digit per sel = digit terakhir kode BPS ('1' → 61 … '5' → 65)
+}
+
+export type StatusCode = 'S' | 'N' | 'W' | 'A';
+
+/** Status semua piksel pada satu slot. */
+export interface GridCompact {
+  pixels_version: string;
+  slot: string;
+  n_sat: 0 | 1 | 2;
+  status: string; // satu StatusCode per sel
+  utility: string; // base64 Uint8 per sel: round(U × 250); 255 = null
+  clusters: Record<string, number[]>; // cluster_id → indeks sel
+}
+
+/** Status per slot untuk satu malam (pemutar slot). */
+export interface NightCompact {
+  pixels_version: string;
+  night: string; // tanggal WIB saat malam dimulai, YYYY-MM-DD
+  slots: string[]; // 54 slot UTC, 13.00–21.50
+  status: (string | null)[]; // per slot; null = belum dievaluasi / tidak ada data
+  n_sat: (0 | 1 | 2 | null)[];
+}
+
+export interface Basemap {
+  id: string;
+  label_id: string;
+  label_en: string;
+  tiles: string[]; // template XYZ raster {z}/{x}/{y}
+  tile_size: number;
+  maxzoom: number;
+  attribution: string;
+}
+
+export type ProvinceBoundary = FeatureCollection<MultiPolygon, { code: ProvinceCode; name: string }>;
+
 export interface Api {
   meta(): Promise<Meta>;
-  grid(asOf?: string): Promise<Grid>;
+  pixels(): Promise<PixelIndex>;
+  gridCompact(asOf?: string): Promise<GridCompact>;
+  night(night: string): Promise<NightCompact>;
+  basemaps(): Promise<Basemap[]>;
   clusters(): Promise<ClusterSummary[]>;
   cluster(id: string): Promise<ClusterDetail>;
   decide(id: string, body: DecisionRequest): Promise<void>;
   peatBoundary(): Promise<PeatBoundary>;
+  provinces(): Promise<ProvinceBoundary>;
 }
 
 export class ApiError extends Error {

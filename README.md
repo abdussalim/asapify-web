@@ -21,6 +21,7 @@ Salin `.env.example` ke `.env` bila perlu mengganti mode:
 | `VITE_API_MODE` | `mock` (default) / `live` | `mock` = data fiktif tanpa backend; `live` = `asapify-api` |
 | `VITE_API_BASE` | URL | Basis API untuk mode live; kosong = same-origin (`/api` di-proxy ke `:8080` saat dev) |
 | `VITE_PEAT_LAYER_URL` | URL GeoJSON | Layer `peat-boundary` di bucket publik (mode live) |
+| `VITE_PROVINCES_LAYER_URL` | URL GeoJSON | Layer batas provinsi di bucket publik (mode live) |
 
 ## Deploy (GitHub → Vercel)
 
@@ -51,9 +52,25 @@ Keadaan layar bisa didemokan dengan `?skenario=` (diingat selama tab terbuka):
 ## Kontrak API untuk tim BE
 
 Buka tab **Kontrak API** di aplikasi (`/kontrak-api`, publik, ID/EN). Isinya: konvensi (auth, waktu UTC,
-`as_of`, koordinat, galat), tabel kode galat, 9 endpoint `asapify-api` (parameter, body, respons, galat,
-layar UI yang memakainya), 23 skema, dan endpoint internal `asapify-agent`. Contoh JSON diambil dari
-fixture mock yang sama dengan UI, jadi tidak bisa berbeda dari tampilan.
+`as_of`, koordinat, galat), tabel kode galat, semua endpoint `asapify-api` (parameter, body, respons,
+galat, layar UI yang memakainya), skema, file statis di bucket, dan endpoint internal `asapify-agent`.
+Contoh JSON diambil dari fixture mock yang sama dengan UI, jadi tidak bisa berbeda dari tampilan.
+
+Peta memakai **format ringkas** (usulan FE): `GET /operator/pixels` sekali (geometri grid, di-cache),
+lalu `GET /operator/grid?format=compact` dan `GET /operator/grid/night` (54 slot dalam satu permintaan
+untuk pemutar). Diukur untuk 10 ribu piksel per slot: ringkas ≈ 23 KB mentah / 11 KB gzip, GeoJSON ≈ 1,9 MB
+mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk alat lain.
+
+## Peta ringan
+
+- MapLibre (±290 KB gzip) hanya dimuat di rute peta; halaman lain ±100 KB gzip.
+- Geometri piksel dibangun sekali; status per slot, filter status, dan pemutar memakai `feature-state`
+  (hanya sel yang berubah yang ditulis ulang, tanpa re-tiling).
+- Mode ringan otomatis bila penghemat data menyala, RAM ≤ 2 GB, ≤ 2 inti (atau ≤ 4 inti dengan RAM ≤ 4 GB),
+  atau reduced-motion: basemap polos, tanpa pendar/garis grid/animasi kamera, pixel ratio 1. Bisa diubah di
+  kontrol Layer; pilihan disimpan per perangkat.
+- Batas provinsi mock: geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors), disederhanakan ±35 KB
+  di `public/mock/`. Mode live memakai `VITE_PROVINCES_LAYER_URL`.
 
 Sumber datanya `src/contract/spec.ts` (tipe TypeScript tetap di `src/types.ts`). Field bertanda
 **usulan FE** belum ada di `backend.html` dan perlu disepakati tim BE.

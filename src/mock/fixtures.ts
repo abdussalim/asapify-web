@@ -1,29 +1,16 @@
 import {
   ApiError,
-  type Api, type Attributes, type ClusterDetail, type ClusterSummary, type Decision, type Grid,
-  type LngLat, type Meta, type Neighbour, type NeighbourDir, type PeatBoundary, type SeriesPoint,
-  type Status, type VerificationDetail,
+  type Api, type Attributes, type Basemap, type ClusterDetail, type ClusterSummary, type Decision, type Grid,
+  type GridCompact, type LngLat, type Meta, type Neighbour, type NeighbourDir, type NightCompact,
+  type PeatBoundary, type PixelIndex, type ProvinceBoundary, type SeriesPoint, type Status, type StatusCode,
+  type VerificationDetail,
 } from '../types';
 import { T_AWAS, T_WATCH, utility } from '../lib/maut';
+import { SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
+import { currentScenario, type Scenario } from './scenario';
 
 // Data FIKTIF untuk demo tanpa backend: replay backtest Kalteng 24 Sep 2023
-// (BACKTEST_BBOX 113.5,-2.6,114.3,-1.9). Bentuk mengikuti backend.html.
-
-export const SCENARIOS = ['normal', 'kosong', 'awan', 'satu_satelit', 'siang'] as const;
-export type Scenario = (typeof SCENARIOS)[number];
-
-const isScenario = (s: string | null): s is Scenario => !!s && (SCENARIOS as readonly string[]).includes(s);
-
-/** ?skenario=… dipakai untuk mendemokan keadaan layar; diingat selama tab terbuka. */
-export function currentScenario(): Scenario {
-  const q = new URLSearchParams(location.search).get('skenario');
-  try {
-    if (isScenario(q)) sessionStorage.setItem('asapify.skenario', q);
-    const s = sessionStorage.getItem('asapify.skenario');
-    if (isScenario(s)) return s;
-  } catch { /* sessionStorage diblokir */ }
-  return isScenario(q) ? q : 'normal';
-}
+// (BACKTEST_BBOX 113.5,-2.6,114.3,-1.9). Bentuk mengikuti backend.html + usulan FE.
 
 const AS_OF = '2023-09-24T15:10:00Z'; // 22.10 WIB
 const STEP = 0.02;
@@ -361,6 +348,92 @@ function buildMeta(sc: Scenario): Meta {
   };
 }
 
+// ---------- format ringkas (indeks piksel, slot, malam) ----------
+
+const PIXELS_VERSION = 'mock-2023-09';
+
+function buildPixels(): PixelIndex {
+  const grid = buildGrid('normal');
+  const rows: number[] = [], cols: number[] = [];
+  for (const f of grid.features) {
+    const { row, col } = cell(f.geometry.coordinates as LngLat);
+    rows.push(row); cols.push(col);
+  }
+  return { version: PIXELS_VERSION, origin: [108.5, 4.5], step: STEP, rows, cols, province: '2'.repeat(rows.length) };
+}
+
+function clustersOf(grid: Grid): Record<string, number[]> {
+  const out: Record<string, number[]> = {};
+  grid.features.forEach((f, i) => {
+    const id = f.properties.cluster_id;
+    if (id) (out[id] ??= []).push(i);
+  });
+  return out;
+}
+
+function buildCompact(sc: Scenario): GridCompact {
+  const grid = buildGrid(sc);
+  return {
+    pixels_version: PIXELS_VERSION,
+    slot: AS_OF,
+    n_sat: sc === 'satu_satelit' ? 1 : 2,
+    status: grid.features.map((f) => STATUS_CODE[f.properties.status]).join(''),
+    utility: encodeUtility(grid.features.map((f) => f.properties.utility)),
+    clusters: clustersOf(grid),
+  };
+}
+
+/** Status per slot yang berevolusi menuju status slot terakhir (sama persis dengan buildCompact). */
+function buildNight(sc: Scenario, night: string): NightCompact {
+  const grid = buildGrid(sc);
+  const latest = grid.features.map((f) => STATUS_CODE[f.properties.status]);
+  const t0 = Date.parse(`${night}T13:00:00Z`);
+  const slots = Array.from({ length: 54 }, (_, k) => iso(t0 + k * SLOT_MS));
+  const asOfNight = nightOf(AS_OF);
+  const last = night === asOfNight ? Math.round((Date.parse(AS_OF) - t0) / SLOT_MS) : night < asOfNight ? 53 : -1;
+  const series = new Map(DEFS.map((d) => [d.id, new Map(toDetail(d).series.map((p) => [p.slot, p.status]))]));
+
+  const evolve = (k: number): string => {
+    let s = '';
+    grid.features.forEach((f, i) => {
+      const p = f.geometry.coordinates as LngLat;
+      const { row, col } = cell(p);
+      const id = f.properties.cluster_id;
+      let code: StatusCode;
+      const cloudy = sc === 'awan'
+        ? f.properties.status === 'NO_OBSERVATION' && rand(row, col, 13) < 0.3 + 0.7 * (k / Math.max(1, last))
+        : ((p[0] - (113.66 - 0.012 * (last - k))) / 0.08) ** 2 + ((p[1] + 2.36) / 0.06) ** 2 <= 1;
+      if (id) code = STATUS_CODE[series.get(id)?.get(slots[k]) ?? 'SAFE'];
+      else if (cloudy) code = 'N';
+      else if (latest[i] === 'W') code = k >= Math.floor(rand(row, col, 11) * last) ? 'W' : 'S';
+      else code = 'S';
+      s += code;
+    });
+    return s;
+  };
+
+  return {
+    pixels_version: PIXELS_VERSION,
+    night,
+    slots,
+    status: slots.map((_, k) => (k > last ? null : k === last && night === asOfNight ? latest.join('') : evolve(k))),
+    n_sat: slots.map((_, k) => (k > last ? null : sc === 'satu_satelit' && k >= last - 4 ? 1 : 2)),
+  };
+}
+
+function buildBasemaps(): Basemap[] {
+  const day = AS_OF.slice(0, 10);
+  return [{
+    id: 'viirs',
+    label_id: `Citra VIIRS ${day} (NASA GIBS)`,
+    label_en: `VIIRS imagery ${day} (NASA GIBS)`,
+    tiles: [`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${day}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`],
+    tile_size: 256,
+    maxzoom: 9,
+    attribution: 'NASA GIBS · VIIRS NOAA-20',
+  }];
+}
+
 // ---------- Api ----------
 
 const wait = <T>(v: T, ms = 300): Promise<T> =>
@@ -368,7 +441,14 @@ const wait = <T>(v: T, ms = 300): Promise<T> =>
 
 export const mockApi: Api = {
   meta: () => wait(buildMeta(currentScenario()), 150),
-  grid: () => wait(buildGrid(currentScenario()), 400),
+  pixels: () => wait(buildPixels(), 200),
+  gridCompact: () => wait(buildCompact(currentScenario()), 250),
+  night: (night) => wait(buildNight(currentScenario(), night), 300),
+  basemaps: () => wait(buildBasemaps(), 100),
+  provinces: async () => {
+    const r = await fetch(`${import.meta.env.BASE_URL}mock/provinces-kalimantan.geojson`);
+    return (await r.json()) as ProvinceBoundary;
+  },
   clusters: () => {
     const sc = currentScenario();
     return wait(sc === 'kosong' ? [] : DEFS.map((d) => toSummary(toDetail(d))));
@@ -408,6 +488,10 @@ export function contractExamples() {
     meta: buildMeta('normal'),
     grid: { type: 'FeatureCollection' as const, features: [pick('AWAS'), pick('NO_OBSERVATION')] },
     gridCount: grid.features.length,
+    pixels: buildPixels(),
+    gridCompact: buildCompact('normal'),
+    night: buildNight('normal', nightOf(AS_OF)),
+    basemaps: buildBasemaps(),
     clusters: [toSummary(detail('C-0923-001')), toSummary(detail('C-0924-001'))],
     cluster: detail('C-0924-002'),
     peat: { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [PEAT[1]] } }] },

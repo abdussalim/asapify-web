@@ -1,5 +1,8 @@
-import { ApiError, type Api, type ClusterDetail, type ClusterSummary, type Grid, type Meta, type PeatBoundary } from './types';
-import { mockApi } from './mock/fixtures';
+import {
+  ApiError,
+  type Api, type Basemap, type ClusterDetail, type ClusterSummary, type GridCompact, type Meta,
+  type NightCompact, type PeatBoundary, type PixelIndex, type ProvinceBoundary,
+} from './types';
 
 export const API_MODE: 'mock' | 'live' = import.meta.env.VITE_API_MODE === 'live' ? 'live' : 'mock';
 
@@ -23,22 +26,43 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+async function file<T>(url: string | undefined, empty: T): Promise<T> {
+  if (!url) return empty;
+  const r = await fetch(url);
+  return (await r.json()) as T;
+}
+
 const enc = encodeURIComponent;
+const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] };
 
 const liveApi: Api = {
   meta: () => req<Meta>('/meta'),
-  grid: (asOf) => req<Grid>(`/operator/grid${asOf ? `?as_of=${enc(asOf)}` : ''}`),
+  pixels: () => req<PixelIndex>('/operator/pixels'),
+  gridCompact: (asOf) => req<GridCompact>(`/operator/grid?format=compact${asOf ? `&as_of=${enc(asOf)}` : ''}`),
+  night: (night) => req<NightCompact>(`/operator/grid/night?night=${enc(night)}`),
+  basemaps: () => req<Basemap[]>('/operator/basemaps'),
   clusters: () => req<ClusterSummary[]>('/operator/clusters?state=active'),
   cluster: (id) => req<ClusterDetail>(`/operator/clusters/${enc(id)}`),
   decide: async (id, body) => {
     await req(`/operator/clusters/${enc(id)}/decision`, { method: 'POST', body: JSON.stringify(body) });
   },
-  peatBoundary: async () => {
-    const url = import.meta.env.VITE_PEAT_LAYER_URL;
-    if (!url) return { type: 'FeatureCollection', features: [] };
-    const r = await fetch(url);
-    return (await r.json()) as PeatBoundary;
-  },
+  peatBoundary: () => file<PeatBoundary>(import.meta.env.VITE_PEAT_LAYER_URL, EMPTY_FC),
+  provinces: () => file<ProvinceBoundary>(import.meta.env.VITE_PROVINCES_LAYER_URL, EMPTY_FC),
+};
+
+// Mode mock dimuat malas: kode + data fiktif tidak ikut chunk utama.
+const mock = () => import('./mock/fixtures').then((m) => m.mockApi);
+const mockApi: Api = {
+  meta: () => mock().then((m) => m.meta()),
+  pixels: () => mock().then((m) => m.pixels()),
+  gridCompact: (asOf) => mock().then((m) => m.gridCompact(asOf)),
+  night: (night) => mock().then((m) => m.night(night)),
+  basemaps: () => mock().then((m) => m.basemaps()),
+  clusters: () => mock().then((m) => m.clusters()),
+  cluster: (id) => mock().then((m) => m.cluster(id)),
+  decide: (id, body) => mock().then((m) => m.decide(id, body)),
+  peatBoundary: () => mock().then((m) => m.peatBoundary()),
+  provinces: () => mock().then((m) => m.provinces()),
 };
 
 export const api: Api = API_MODE === 'live' ? liveApi : mockApi;

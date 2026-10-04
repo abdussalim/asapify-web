@@ -21,7 +21,8 @@ export interface Schema {
 
 export type ExampleKey =
   | 'health' | 'meta' | 'grid' | 'clusters' | 'cluster' | 'verifyReq' | 'verifyRes' | 'decisionReq'
-  | 'decisionRes' | 'decisionErr' | 'alerts' | 'closeReq' | 'closeRes' | 'peat';
+  | 'decisionRes' | 'decisionErr' | 'alerts' | 'closeReq' | 'closeRes' | 'peat'
+  | 'pixels' | 'gridCompact' | 'night' | 'basemaps';
 
 export interface Endpoint {
   id: string;
@@ -160,6 +161,63 @@ export const SCHEMAS: Schema[] = [
       { name: 'properties.n_sat', type: '0 | 1 | 2', req: true, desc: t('Satelit cerah untuk piksel ini.', 'Clear-sky satellites for this pixel.') },
       { name: 'properties.cluster_id', type: 'string | null', req: true, origin: 'fe', desc: t('ID kelompok AWAS aktif bila piksel anggota; UI menggambar garis kelompok dari sini.', 'Active AWAS cluster id if the pixel is a member; the UI draws cluster outlines from it.') },
       { name: 'properties.province', type: "'61' | '62' | '63' | '64' | '65'", req: true, origin: 'fe', desc: t('Kode BPS provinsi; dipakai filter provinsi.', 'BPS province code; used by the province filter.') },
+    ],
+  },
+  {
+    name: 'PixelIndex', origin: 'fe',
+    desc: t('Daftar piksel gambut statis, diunduh sekali per versi (cache lewat ETag). Urutannya = indeks sel di GridCompact dan NightCompact. Kalimantan ±10 ribu sel ≈ 90 KB mentah, jauh lebih kecil setelah gzip.', 'Static peat pixel list, downloaded once per version (cache via ETag). Its order = the cell index in GridCompact and NightCompact. Kalimantan ≈ 10k cells ≈ 90 KB raw, far smaller once gzipped.'),
+    fields: [
+      { name: 'version', type: 'string', req: true, desc: t('Berubah hanya bila peat mask dibangun ulang (asapify-build).', 'Changes only when the peat mask is rebuilt (asapify-build).') },
+      { name: 'origin', type: '[lon, lat]', req: true, desc: t('Pojok kiri atas grid: [108.5, 4.5].', 'Grid top-left corner: [108.5, 4.5].') },
+      { name: 'step', type: 'number', req: true, desc: t('Ukuran sel derajat: 0.02.', 'Cell size in degrees: 0.02.') },
+      { name: 'rows', type: 'integer[]', req: true, desc: t('Baris tiap sel (dari utara).', 'Row of each cell (from the north).') },
+      { name: 'cols', type: 'integer[]', req: true, desc: t('Kolom tiap sel (dari barat).', 'Column of each cell (from the west).') },
+      { name: 'province', type: 'string', req: true, desc: t('Satu digit per sel = digit terakhir kode BPS (`2` → 62).', 'One digit per cell = last digit of the BPS code (`2` → 62).') },
+    ],
+  },
+  {
+    name: 'GridCompact', origin: 'fe',
+    desc: t('Status semua sel pada satu slot dalam bentuk ringkas; dipakai peta. Diukur untuk 10 ribu sel: ≈ 23 KB mentah / 11 KB gzip, vs GeoJSON ≈ 1,9 MB mentah / 83 KB gzip — dan jauh lebih ringan di-parse di HP.', 'Status of every cell at one slot, compact; used by the map. Measured for 10k cells: ≈ 23 KB raw / 11 KB gzip, vs GeoJSON ≈ 1.9 MB raw / 83 KB gzip — and far lighter to parse on phones.'),
+    fields: [
+      { name: 'pixels_version', type: 'string', req: true, desc: t('Harus sama dengan PixelIndex.version; bila beda, UI mengunduh ulang indeks.', 'Must equal PixelIndex.version; if not, the UI re-downloads the index.') },
+      { name: 'slot', type: ISO, req: true, desc: t('Slot yang ditampilkan (≤ as_of).', 'Slot shown (≤ as_of).') },
+      { name: 'n_sat', type: '0 | 1 | 2', req: true, desc: t('Satelit tersedia di slot ini.', 'Satellites available at this slot.') },
+      { name: 'status', type: 'string', req: true, desc: t('Satu huruf per sel: `S` SAFE, `N` NO_OBSERVATION, `W` WATCH, `A` AWAS.', 'One letter per cell: `S` SAFE, `N` NO_OBSERVATION, `W` WATCH, `A` AWAS.') },
+      { name: 'utility', type: 'string (base64)', req: true, desc: t('Uint8 per sel: round(U × 250); 255 = null.', 'Uint8 per cell: round(U × 250); 255 = null.') },
+      { name: 'clusters', type: 'Record<cluster_id, integer[]>', req: true, desc: t('Indeks sel anggota tiap kelompok AWAS aktif; UI menggambar garis kelompok dari sini.', 'Member cell indices of each active AWAS cluster; the UI draws cluster outlines from it.') },
+    ],
+  },
+  {
+    name: 'NightCompact', origin: 'fe',
+    desc: t('Status per slot untuk satu malam; satu permintaan untuk pemutar slot (54 string status, ±530 KB mentah untuk 10 ribu sel). Gzip sangat efektif karena status jarang berubah antar slot.', 'Status per slot for one night; one request for the slot player (54 status strings, ≈ 530 KB raw for 10k cells). Gzip is very effective because status rarely changes between slots.'),
+    fields: [
+      { name: 'pixels_version', type: 'string', req: true, desc: t('Sama seperti GridCompact.', 'Same as GridCompact.') },
+      { name: 'night', type: 'string · YYYY-MM-DD', req: true, desc: t('Tanggal WIB saat malam dimulai (night_id).', 'WIB date the night starts (night_id).') },
+      { name: 'slots', type: `${ISO}[54]`, req: true, desc: t('13.00–21.50 UTC, tiap 10 menit.', '13:00–21:50 UTC, every 10 minutes.') },
+      { name: 'status', type: '(string | null)[54]', req: true, desc: t('Format sama dengan GridCompact.status; null = slot belum dievaluasi atau tidak ada data.', 'Same format as GridCompact.status; null = slot not evaluated yet or no data.') },
+      { name: 'n_sat', type: '(0 | 1 | 2 | null)[54]', req: true, desc: t('Satelit per slot.', 'Satellites per slot.') },
+    ],
+  },
+  {
+    name: 'Basemap', origin: 'fe',
+    desc: t('Satu pilihan peta dasar raster dari BE (mis. citra satelit). Peta jalan dan polos disediakan FE.', 'One raster basemap option from the BE (e.g. satellite imagery). Street and plain maps are provided by the FE.'),
+    fields: [
+      { name: 'id', type: 'string', req: true, desc: t('ID unik, mis. `viirs`.', 'Unique id, e.g. `viirs`.') },
+      { name: 'label_id', type: 'string', req: true, desc: t('Label Bahasa Indonesia di kontrol layer.', 'Indonesian label in the layer control.') },
+      { name: 'label_en', type: 'string', req: true, desc: t('Label Inggris.', 'English label.') },
+      { name: 'tiles', type: 'string[]', req: true, desc: t('Template URL XYZ dengan {z}/{x}/{y}; boleh signed URL.', 'XYZ URL templates with {z}/{x}/{y}; may be signed URLs.') },
+      { name: 'tile_size', type: '256 | 512', req: true, desc: t('Ukuran tile piksel.', 'Tile size in pixels.') },
+      { name: 'maxzoom', type: 'integer', req: true, desc: t('Zoom tertinggi yang tersedia; di atasnya tile diperbesar.', 'Highest available zoom; tiles are upscaled beyond it.') },
+      { name: 'attribution', type: 'string', req: true, desc: t('Atribusi wajib sumber citra.', 'Required imagery attribution.') },
+    ],
+  },
+  {
+    name: 'ProvinceBoundary', origin: 'fe',
+    desc: t('Berkas statis `layers/provinces.geojson` di bucket publik (bukan endpoint API): 5 provinsi Kalimantan, disederhanakan ±35 KB. Sumber geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).', 'Static file `layers/provinces.geojson` in the public bucket (not an API endpoint): the 5 Kalimantan provinces, simplified ≈ 35 KB. Source geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).'),
+    fields: [
+      { name: 'features[].properties.code', type: "'61' … '65'", req: true, desc: t('Kode BPS provinsi.', 'BPS province code.') },
+      { name: 'features[].properties.name', type: 'string', req: true, desc: t('Nama provinsi (label peta).', 'Province name (map label).') },
+      { name: 'features[].geometry', type: 'MultiPolygon', req: true, desc: t('Batas provinsi.', 'Province boundary.') },
     ],
   },
   {
@@ -375,22 +433,55 @@ export const ENDPOINTS: Endpoint[] = [
     id: 'meta', method: 'GET', path: '/meta', auth: 'public',
     title: t('Keadaan data', 'Data state'),
     purpose: t('Slot terakhir per satelit, malam/siang, dan status replay.', 'Latest slot per satellite, night/day and replay status.'),
-    usedBy: t('Peta → banner data + pita malam (DataBanner); keadaan "satu satelit", "siang", "replay".', 'Map → data banner + night ribbon (DataBanner); "single satellite", "daytime", "replay" states.'),
+    usedBy: t('Peta → banner data (DataBanner), baris H/G dan slot terbaru di pemutar slot; keadaan "satu satelit", "siang", "replay".', 'Map → data banner (DataBanner), H/G rows and latest slot in the slot player; "single satellite", "daytime", "replay" states.'),
     params: [AS_OF_PARAM],
     responses: [{ code: 200, schema: 'Meta', example: 'meta' }],
     errors: ['VALIDATION'],
   },
   {
+    id: 'pixels', method: 'GET', path: '/operator/pixels', auth: 'operator',
+    title: t('Indeks piksel gambut', 'Peat pixel index'),
+    purpose: t('Geometri grid statis, diunduh sekali lalu di-cache (kirim ETag + Cache-Control). Respons ringkas lain merujuk sel lewat urutan di sini.', 'Static grid geometry, downloaded once then cached (send ETag + Cache-Control). Other compact responses refer to cells by this order.'),
+    usedBy: t('Peta → geometri semua kotak piksel (dibangun sekali), pencarian ID piksel/koordinat, inspektur piksel.', 'Map → geometry of every pixel square (built once), pixel id / coordinate search, pixel inspector.'),
+    responses: [{ code: 200, schema: 'PixelIndex', example: 'pixels' }],
+    errors: ['UNAUTHENTICATED', 'FORBIDDEN'],
+  },
+  {
     id: 'grid', method: 'GET', path: '/operator/grid', auth: 'operator',
     title: t('Status piksel gambut', 'Peat pixel status'),
-    purpose: t('Semua piksel gambut untuk slot malam terakhir ≤ as_of, sebagai GeoJSON titik. Kalimantan ±10 ribu piksel: aktifkan gzip.', 'Every peat pixel for the latest night slot ≤ as_of, as GeoJSON points. Kalimantan ≈ 10k pixels: enable gzip.'),
-    usedBy: t('Peta → layer pixel-status, ikon status, garis kelompok, keadaan "tertutup awan" (> 50% NO_OBSERVATION).', 'Map → pixel-status layer, status icons, cluster outlines, "cloud covered" state (> 50% NO_OBSERVATION).'),
+    purpose: t('Semua piksel gambut untuk slot malam terakhir ≤ as_of. Dua format: GeoJSON titik (default, sesuai backend.html, untuk alat lain/debug) dan `format=compact` (dipakai UI).', 'Every peat pixel for the latest night slot ≤ as_of. Two formats: GeoJSON points (default, as in backend.html, for other tools/debugging) and `format=compact` (used by the UI).'),
+    usedBy: t('Peta (format=compact) → warna + ikon status, garis kelompok, inspektur, keadaan "tertutup awan" (> 50% N).', 'Map (format=compact) → status colours + icons, cluster outlines, inspector, "cloud covered" state (> 50% N).'),
     params: [
       AS_OF_PARAM,
-      { name: 'province', type: "query · '61' … '65'", req: false, origin: 'fe', desc: t('Batasi ke satu provinsi (opsional; UI saat ini memfilter di klien).', 'Limit to one province (optional; the UI currently filters client-side).') },
+      { name: 'format', type: "query · 'geojson' | 'compact'", req: false, origin: 'fe', desc: t('Default geojson. UI selalu mengirim compact.', 'Default geojson. The UI always sends compact.') },
+      { name: 'province', type: "query · '61' … '65'", req: false, origin: 'fe', desc: t('Hanya untuk geojson (opsional); UI memfilter di klien.', 'geojson only (optional); the UI filters client-side.') },
     ],
-    responses: [{ code: 200, schema: 'GridFeature', example: 'grid', note: t('FeatureCollection<Point, GridFeature.properties>. Contoh dipotong jadi 2 fitur.', 'FeatureCollection<Point, GridFeature.properties>. Example trimmed to 2 features.') }],
+    responses: [
+      { code: 200, schema: 'GridCompact', example: 'gridCompact', note: t('format=compact. String panjang dipotong di contoh.', 'format=compact. Long strings are trimmed in the example.') },
+      { code: 200, schema: 'GridFeature', example: 'grid', note: t('format=geojson: FeatureCollection<Point, GridFeature.properties>, contoh dipotong jadi 2 fitur.', 'format=geojson: FeatureCollection<Point, GridFeature.properties>, trimmed to 2 features.') },
+    ],
     errors: ['UNAUTHENTICATED', 'FORBIDDEN', 'VALIDATION'],
+  },
+  {
+    id: 'night', method: 'GET', path: '/operator/grid/night', auth: 'operator',
+    title: t('Status per slot satu malam', 'Per-slot status for one night'),
+    purpose: t('54 string status (format ringkas) untuk satu malam; satu permintaan menggantikan 54 × /operator/grid. Slot setelah as_of = null.', '54 status strings (compact format) for one night; one request replaces 54 × /operator/grid. Slots after as_of = null.'),
+    usedBy: t('Peta → pemutar slot (pita malam: baris ▲ jumlah AWAS per slot), riwayat 54 slot di inspektur piksel.', 'Map → slot player (night ribbon: ▲ row = AWAS count per slot), 54-slot history in the pixel inspector.'),
+    params: [
+      { name: 'night', type: 'query · YYYY-MM-DD', req: true, origin: 'fe', desc: t('night_id (tanggal WIB malam dimulai).', 'night_id (WIB date the night starts).') },
+      AS_OF_PARAM,
+    ],
+    responses: [{ code: 200, schema: 'NightCompact', example: 'night', note: t('Contoh dipotong.', 'Example trimmed.') }],
+    errors: ['UNAUTHENTICATED', 'FORBIDDEN', 'VALIDATION'],
+  },
+  {
+    id: 'basemaps', method: 'GET', path: '/operator/basemaps', auth: 'operator',
+    title: t('Pilihan peta dasar', 'Basemap options'),
+    purpose: t('Basemap raster yang disediakan BE (mis. citra satelit tanggal as_of). Sumbernya keputusan BE; FE hanya memasang template tile.', 'Raster basemaps provided by the BE (e.g. satellite imagery for the as_of date). The source is the BE\'s choice; the FE only mounts the tile template.'),
+    usedBy: t('Peta → kontrol layer, pilihan "satelit".', 'Map → layer control, "satellite" option.'),
+    params: [AS_OF_PARAM],
+    responses: [{ code: 200, schema: 'Basemap', example: 'basemaps', note: t('Basemap[]. Array kosong = hanya peta jalan dan polos.', 'Basemap[]. Empty array = street and plain maps only.') }],
+    errors: ['UNAUTHENTICATED', 'FORBIDDEN'],
   },
   {
     id: 'clusters', method: 'GET', path: '/operator/clusters', auth: 'operator',
@@ -408,7 +499,7 @@ export const ENDPOINTS: Endpoint[] = [
     id: 'cluster', method: 'GET', path: '/operator/clusters/{id}', auth: 'operator',
     title: t('Detail kelompok', 'Cluster detail'),
     purpose: t('Deret utility 3 malam, atribut MAUT slot pemicu, tetangga, verifikasi lengkap + jejak tool, signed URL citra.', '3-night utility series, MAUT attributes at the trigger slot, neighbours, full verification + tool trace, signed image URLs.'),
-    usedBy: t('Detail kelompok → UtilityChart, AttributeBars, NeighbourGrid, kartu verifikasi, ToolTrace, caption DecisionPanel; peta → layer viirs untuk kelompok terpilih.', 'Cluster detail → UtilityChart, AttributeBars, NeighbourGrid, verification card, ToolTrace, DecisionPanel caption; map → viirs layer for the selected cluster.'),
+    usedBy: t('Detail kelompok → UtilityChart, AttributeBars, NeighbourGrid, kartu verifikasi, ToolTrace, caption DecisionPanel; peta → titik VIIRS untuk kelompok terpilih.', 'Cluster detail → UtilityChart, AttributeBars, NeighbourGrid, verification card, ToolTrace, DecisionPanel caption; map → VIIRS points for the selected cluster.'),
     params: [
       { name: 'id', type: 'path · string', req: true, origin: 'backend', desc: t('ID kelompok, mis. C-0924-002.', 'Cluster id, e.g. C-0924-002.') },
       AS_OF_PARAM,

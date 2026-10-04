@@ -21,14 +21,16 @@ function typeCell(type: string): ReactNode {
   );
 }
 
-/** Larik panjang dipotong agar contoh tetap terbaca. */
+/** Larik dan string panjang dipotong agar contoh tetap terbaca. */
 function trim(v: unknown, note: (n: number) => string): unknown {
+  if (typeof v === 'string' && v.length > 96) return `${v.slice(0, 64)}… (+${v.length - 64})`;
   if (Array.isArray(v)) {
     const head = v.slice(0, 3).map((x) => trim(x, note));
     return v.length > 4 ? [...head, note(v.length - 3)] : v.map((x) => trim(x, note));
   }
   if (v && typeof v === 'object') {
-    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === 'coordinates' ? x : trim(x, note)]));
+    const keep = new Set(['coordinates', 'tiles', 'url']); // URL dan koordinat tetap utuh
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keep.has(k) ? x : trim(x, note)]));
   }
   return v;
 }
@@ -118,7 +120,7 @@ function EndpointCard({ ep, examples }: { ep: Endpoint; examples: Record<string,
 
       <h4>{t('api.response')}</h4>
       {ep.responses.map((r) => (
-        <div className="resp" key={r.code}>
+        <div className="resp" key={`${r.code}-${r.schema}`}>
           <p>
             <span className={`code c${String(r.code)[0]}`}>{r.code}</span>{' '}
             <a href={`#sc-${r.schema}`}>{r.schema}</a>
