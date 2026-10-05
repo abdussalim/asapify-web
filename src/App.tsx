@@ -7,11 +7,12 @@ import { useTheme } from './lib/theme';
 import { API_MODE } from './api';
 import { currentScenario } from './mock/scenario';
 import { Masuk } from './pages/Masuk';
-import { Kelompok } from './pages/Kelompok';
 import { Tentang } from './pages/Tentang';
 
-// MapLibre (±230 KB gzip) dan teks kontrak hanya dimuat di rutenya sendiri.
+// MapLibre (±230 KB gzip), halaman detail kelompok (citra termal, grafik, tabel parameter), dan teks kontrak
+// hanya dimuat di rutenya sendiri.
 const PetaOperator = lazy(() => import('./pages/PetaOperator').then((m) => ({ default: m.PetaOperator })));
+const Kelompok = lazy(() => import('./pages/Kelompok').then((m) => ({ default: m.Kelompok })));
 const KontrakApi = lazy(() => import('./pages/KontrakApi').then((m) => ({ default: m.KontrakApi })));
 
 function PageFallback() {

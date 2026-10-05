@@ -32,6 +32,12 @@ export const IconCalendar = ({ size }: P) => (
   <svg {...base(size)}><rect x="2.2" y="3.2" width="11.6" height="10.6" rx="1.6" /><path d="M2.2 6.6h11.6M5.3 1.8v2.6M10.7 1.8v2.6" /></svg>
 );
 export const IconClock = ({ size }: P) => <svg {...base(size)}><circle cx="8" cy="8" r="6.2" /><path d="M8 4.5V8l2.3 1.5" /></svg>;
+export const IconThermo = ({ size }: P) => (
+  <svg {...base(size)}><path d="M6.4 9.6V3.4a1.6 1.6 0 0 1 3.2 0v6.2a3 3 0 1 1-3.2 0z" /><path d="M8 7v4.4" /></svg>
+);
+export const IconCrosshair = ({ size }: P) => (
+  <svg {...base(size)}><circle cx="8" cy="8" r="4.2" /><path d="M8 1.6v3.2M8 11.2v3.2M1.6 8h3.2M11.2 8h3.2" /></svg>
+);
 export const IconArrowLeft = ({ size }: P) => <svg {...base(size)}><path d="M13 8H3M7 4L3 8l4 4" /></svg>;
 
 export function StatusIcon({ status, size }: { status: Status; size?: number }) {

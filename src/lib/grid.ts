@@ -3,6 +3,23 @@ import type { LngLat, PixelIndex, ProvinceCode, Status, StatusCode } from '../ty
 export const CODE_STATUS: Record<StatusCode, Status> = { S: 'SAFE', N: 'NO_OBSERVATION', W: 'WATCH', A: 'AWAS' };
 export const STATUS_CODE: Record<Status, StatusCode> = { SAFE: 'S', NO_OBSERVATION: 'N', WATCH: 'W', AWAS: 'A' };
 
+/** Grid 0,02° gabungan Sumatra + Kalimantan; `pixel_id` = p{baris}_{kolom} dari pojok kiri atas ini (PixelIndex.origin/step). */
+export const GRID_ORIGIN: LngLat = [94.9, 6.2];
+export const GRID_STEP = 0.02;
+
+/** Sel grid (baris, kolom) yang memuat koordinat ini, dan id pikselnya. */
+export function gridCellAt(lon: number, lat: number) {
+  const row = Math.floor((GRID_ORIGIN[1] - lat) / GRID_STEP + 1e-9);
+  const col = Math.floor((lon - GRID_ORIGIN[0]) / GRID_STEP + 1e-9);
+  return { row, col, id: `p${row}_${col}` };
+}
+
+/** Titik tengah piksel dari id `p{baris}_{kolom}`, atau null bila bukan id yang sah. */
+export function pixelCenter(id: string): LngLat | null {
+  const m = /^p(\d+)_(\d+)$/.exec(id);
+  return m ? [GRID_ORIGIN[0] + (Number(m[2]) + 0.5) * GRID_STEP, GRID_ORIGIN[1] - (Number(m[1]) + 0.5) * GRID_STEP] : null;
+}
+
 export const NIGHT_SLOTS = 54; // 20.00–04.50 WIB = 13.00–21.50 UTC
 export const SLOT_MS = 600_000;
 

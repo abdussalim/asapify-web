@@ -29,8 +29,8 @@ function trim(v: unknown, note: (n: number) => string): unknown {
     return v.length > 4 ? [...head, note(v.length - 3)] : v.map((x) => trim(x, note));
   }
   if (v && typeof v === 'object') {
-    const keep = new Set(['coordinates', 'tiles', 'url']); // URL dan koordinat tetap utuh
-    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keep.has(k) ? x : trim(x, note)]));
+    const keep = new Set(['coordinates', 'tiles', 'url']); // URL dan koordinat tetap utuh, kecuali data: URI (citra mock)
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keep.has(k) && !(typeof x === 'string' && x.startsWith('data:')) ? x : trim(x, note)]));
   }
   return v;
 }

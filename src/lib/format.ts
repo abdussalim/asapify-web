@@ -47,3 +47,12 @@ export function fmtNum(n: number, digits: number, lang: Lang): string {
 export function fmtCoord(lon: number, lat: number): string {
   return `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
 }
+
+/** Angka bertanda untuk selisih: "+12,4" / "−0,7" (tanda minus sungguhan, bukan tanda hubung). */
+export function fmtSigned(n: number, digits: number, lang: Lang): string {
+  const s = fmtNum(Math.abs(n), digits, lang);
+  return `${n < 0 && Number(s.replace(',', '.')) !== 0 ? '−' : '+'}${s}`;
+}
+
+/** Suhu kecerahan K → "38,4 °C". */
+export const fmtC = (k: number, lang: Lang) => `${fmtNum(k - 273.15, 1, lang)} °C`;

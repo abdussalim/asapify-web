@@ -99,6 +99,22 @@ export interface ToolCall {
   ok: boolean;
 }
 
+/** Satu kanal termal pada crop: suhu kecerahan tiap sel (≈ 2 km), baris atas dulu, kelvin 1 desimal; null = tertutup awan. */
+export interface ThermalBand {
+  sat: 'himawari' | 'gk2a';
+  band: string; // 'B07' | 'B14' (Himawari-9 AHI), 'SW038' | 'IR105' (GK2A AMI)
+  um: number; // panjang gelombang tengah, µm; < 5 = kanal panas (3,8–3,9), ≥ 5 = kanal acuan (10–11)
+  values: (number | null)[]; // cols × rows
+}
+
+/** Data di balik citra termal supaya UI bisa menampilkan angka suhu per sel (FE). */
+export interface ThermalCrop {
+  bbox: [number, number, number, number]; // [lon_barat, lat_selatan, lon_timur, lat_utara] persis seperti citra
+  cols: number;
+  rows: number;
+  bands: ThermalBand[];
+}
+
 export interface EvidenceImg {
   source: 'viirs_image' | 'himawari_image';
   url: string; // signed URL crop
@@ -106,6 +122,8 @@ export interface EvidenceImg {
   observed_at: string;
   age_h: number;
   marker_drawn: boolean; // false → UI menggambar penanda koordinat sendiri
+  bbox?: [number, number, number, number]; // FE: [lon_barat, lat_selatan, lon_timur, lat_utara]; tanpa ini UI mengira ±0,2° dari koordinat kelompok
+  thermal?: ThermalCrop; // FE: hanya himawari_image
 }
 
 export interface ViirsDetection {
@@ -128,8 +146,26 @@ export interface VerificationDetail extends VerificationSummary {
   viirs: ViirsDetection[]; // FE
 }
 
+/** Satu angka pendukung atribut (mis. suhu kecerahan B07 di piksel perwakilan). */
+export interface AttrPart {
+  key: string; // b07 | b14 | sw038 | ir105 | dt | bg_dt | sigma | lst | ts | t2m | night_peak
+  value: number | null;
+  unit: string; // 'K' | 'U'
+  abs?: boolean; // true = suhu mutlak (tampil °C + K); selain itu selisih/angka biasa
+  at?: string; // night_peak: malam YYYY-MM-DD
+}
+
+/** Angka terukur di balik satu atribut MAUT u (FE): value dinormalisasi linear lewat scale lalu dipotong ke 0–1. */
+export interface AttrDetail {
+  value: number | null; // null = tidak tersedia (sama dengan atribut null)
+  unit: string; // 'K' | 'malam' | 'piksel'
+  scale: [number, number]; // value untuk u = 0 dan u = 1
+  parts: AttrPart[];
+}
+
 export interface ClusterDetail extends Omit<ClusterSummary, 'verification'> {
   attributes: Attributes;
+  attribute_details?: Record<AttrKey, AttrDetail>; // FE
   series: SeriesPoint[];
   neighbours: Neighbour[]; // FE
   verification: VerificationDetail | null;

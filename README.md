@@ -68,7 +68,7 @@ mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk al
 
 ## Peta ringan
 
-- MapLibre (±290 KB gzip) hanya dimuat di rute peta; halaman lain ±118 KB gzip (±17 KB di antaranya inti gerak, lihat *Gerak*).
+- MapLibre (±290 KB gzip) hanya dimuat di rute peta; halaman lain ±113 KB gzip (±17 KB di antaranya inti gerak, lihat *Gerak*). Halaman detail kelompok (±10 KB gzip) juga dimuat per rute.
 - Geometri piksel dibangun sekali; status per slot, filter status, dan pemutar memakai `feature-state`
   (hanya sel yang berubah yang ditulis ulang, tanpa re-tiling).
 - Mode ringan otomatis bila penghemat data menyala, RAM ≤ 2 GB, ≤ 2 inti (atau ≤ 4 inti dengan RAM ≤ 4 GB),
@@ -81,6 +81,24 @@ mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk al
 
 Sumber datanya `src/contract/spec.ts` (tipe TypeScript tetap di `src/types.ts`). Field bertanda
 **usulan FE** belum ada di `backend.html` dan perlu disepakati tim BE.
+
+## Detail kelompok: suhu terukur
+
+Halaman `/kelompok/:id` menampilkan angka, bukan hanya bobot:
+
+- **Tooltip pada citra bukti.** Citra termal Himawari: arahkan kursor, ketuk, atau pakai tombol panah untuk melihat suhu
+  kecerahan tiap piksel 0,02° (id piksel, koordinat, jarak dari penanda) untuk **Himawari-9 B07/B14** dan **GK2A
+  SW038/IR105** dalam °C dan K, selisih kanal, anomali terhadap latar crop (median, simpangan MAD, z), dan apakah piksel
+  itu anggota kelompok atau berawan. Citra VIIRS: koordinat + jarak di bawah kursor, dan titik deteksi FIRMS (satelit,
+  waktu, jarak, keyakinan, FRP) yang bisa difokuskan dengan Tab. Tooltip dirender di `<body>` (`FloatingTip`) jadi tidak
+  terpotong, dijepit ke layar, dan meluncur dengan pegas.
+- **Tabel parameter MAUT.** Tiap atribut menampilkan angka terukur (mis. `+18,6 K`, `2 dari 3 malam`), nilai u, bobot,
+  sumbangan w × u, angka pendukung (suhu tiap kanal, latar, σ, LST/TS/T2M, U puncak per malam), skala normalisasi, dan
+  rumus `U = Σ w·u ÷ Σ w` dengan angkanya. Sorot batang u untuk melihat rumus normalisasinya.
+- **Data.** `EvidenceImg.thermal` (grid `ThermalCrop`, 4 kanal × 20 × 20 sel) dan `ClusterDetail.attribute_details` adalah
+  **usulan FE** yang belum ada di `backend.html`; keduanya opsional (tanpa itu citra tampil tanpa tooltip dan tabel hanya
+  berisi u dan bobot). Skema ada di tab Kontrak API. Mode mock membangun citra, tooltip, dan tabel dari satu grid suhu
+  fiktif, jadi angkanya selalu sepakat dan terhubung ke `u` di fixture (`src/mock/thermal.ts`).
 
 ## Gerak
 

@@ -86,7 +86,7 @@ export function Kelompok() {
           </m.section>
           <m.section className="card" aria-labelledby="attr-h" {...reveal(2)}>
             <h2 id="attr-h">{t('attr.title')}</h2>
-            <AttributeBars attributes={c.attributes} neighbourSupport={c.neighbour_support} weights={WEIGHTS} />
+            <AttributeBars attributes={c.attributes} neighbourSupport={c.neighbour_support} weights={WEIGHTS} details={c.attribute_details} />
           </m.section>
           <m.section className="card" aria-labelledby="nbr-h" {...reveal(3)}>
             <h2 id="nbr-h">{t('nbr.title')}</h2>
@@ -106,7 +106,11 @@ export function Kelompok() {
               <>
                 <p>{lang === 'id' ? v.summary_id : v.summary_en}</p>
                 <p className="muted small">{t('ver.at', { when: fmtSlot(v.at, lang) })}</p>
-                <div className="evimgs">{v.images.map((img) => <EvidenceImage key={img.source} img={img} />)}</div>
+                <div className="evimgs">
+                  {v.images.map((img) => (
+                    <EvidenceImage key={img.source} img={img} centre={c.centroid} clusterPixels={c.pixels} repPixel={c.rep_pixel} viirs={v.viirs} />
+                  ))}
+                </div>
 
                 <h3>{t('ver.viirs_title')}</h3>
                 <ViirsList detections={v.viirs} />

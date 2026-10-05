@@ -1,12 +1,14 @@
 import {
   ApiError,
-  type Api, type Attributes, type Basemap, type ClusterDetail, type ClusterSummary, type Decision, type Grid,
+  type Api, type AttrDetail, type AttrKey, type Attributes, type Basemap, type ClusterDetail, type ClusterSummary, type Decision, type EvidenceImg, type Grid,
   type GridCompact, type LngLat, type Meta, type Neighbour, type NeighbourDir, type NightCompact, type NightSummary,
   type PeatBoundary, type PixelIndex, type ProvinceBoundary, type ProvinceCode, type SeriesPoint, type Status, type StatusCode,
   type VerificationDetail,
 } from '../types';
 import { T_AWAS, T_WATCH, utility } from '../lib/maut';
-import { NIGHT_SLOTS, SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
+import { GRID_ORIGIN, GRID_STEP, NIGHT_SLOTS, SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
+import { rand } from './rand';
+import { ATTR_SCALES, attributeDetails, buildThermal, cropCell, himawariImageUrl, rawFromU } from './thermal';
 import { currentScenario, type Scenario } from './scenario';
 
 // Data FIKTIF untuk demo tanpa backend: replay 24 Sep 2023 di gambut Sumatra + Kalimantan
@@ -16,8 +18,8 @@ import { currentScenario, type Scenario } from './scenario';
 const AS_OF = '2023-09-24T15:10:00Z'; // 22.10 WIB
 const ARCHIVE_FIRST = '2023-02-16'; // arsip GK2A di NOAA mulai di sini; AWAS butuh dua satelit
 const OUTAGES = new Set(['2023-04-11', '2023-07-02', '2023-08-19']); // malam tanpa data (gangguan fiktif)
-const STEP = 0.02;
-const ORIGIN: LngLat = [94.9, 6.2]; // grid gabungan Sumatra + Kalimantan
+const STEP = GRID_STEP;
+const ORIGIN = GRID_ORIGIN; // grid gabungan Sumatra + Kalimantan
 
 /** Poligon kira-kira berbentuk tidak beraturan di sekitar pusat (deterministik). */
 function blob([cx, cy]: LngLat, r: number, seed: number): LngLat[] {
@@ -61,13 +63,6 @@ const AREAS: { code: ProvinceCode; rings: LngLat[][] }[] = [
 
 // ---------- util ----------
 
-function rand(a: number, b: number, s = 0): number {
-  let h = (a * 374761393 + b * 668265263 + s * 1442695041) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-
 const r2 = (x: number) => Math.round(x * 100) / 100;
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
@@ -100,20 +95,6 @@ function gibsUrl([lon, lat]: LngLat, day: string, sat = 'NOAA20'): string {
   return `${GIBS}?${p}`;
 }
 
-/** Crop termal Himawari tiruan (SVG); backend asli menyajikan PNG dari crops/. */
-function himawariSvg(strength: number): string {
-  const r = 10 + strength * 16;
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'>
-<defs><radialGradient id='g' cx='45%' cy='40%' r='75%'><stop offset='0' stop-color='#454b52'/><stop offset='1' stop-color='#14171b'/></radialGradient>
-<radialGradient id='h'><stop offset='0' stop-color='#fff8dc'/><stop offset='.4' stop-color='#ffb347'/><stop offset='1' stop-color='#ff6a00' stop-opacity='0'/></radialGradient></defs>
-<rect width='256' height='256' fill='url(#g)'/>
-<ellipse cx='60' cy='52' rx='70' ry='28' fill='#cfd5da' opacity='.35'/>
-<ellipse cx='210' cy='200' rx='60' ry='22' fill='#cfd5da' opacity='.25'/>
-<circle cx='128' cy='128' r='${r.toFixed(0)}' fill='url(#h)' opacity='${(0.5 + strength / 2).toFixed(2)}'/>
-<text x='8' y='246' font-family='monospace' font-size='11' fill='#9aa4ad'>Himawari-9 B07 · mock</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
 // ---------- deret utility 3 malam ----------
 
 interface Night { date: string; from: number; to: number; end?: number; peakAt?: number; clouds?: [number, number][] }
@@ -144,6 +125,7 @@ function buildSeries(nights: Night[], seed: number): SeriesPoint[] {
 
 interface ClusterDef {
   id: string;
+  heat: number;
   state?: 'closed'; // default aktif
   province: ProvinceCode;
   pixels: LngLat[];
@@ -173,6 +155,7 @@ const T915 = '2023-09-15T16:30:00Z';
 const DEFS: ClusterDef[] = [
   {
     id: 'C-0924-002',
+    heat: 1, // seberapa luas dan kuat titik panas di citra termal (0–1)
     province: '62',
     pixels: C002,
     attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.5, u_SAT: 0.0, u_T: 0.67 },
@@ -201,7 +184,7 @@ const DEFS: ClusterDef[] = [
       ],
       images: [
         { source: 'viirs_image', url: gibsUrl([113.92, -2.21], '2023-09-24'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7, marker_drawn: false },
-        { source: 'himawari_image', url: himawariSvg(1), layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
+        { source: 'himawari_image', url: '', layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
       ],
       viirs: [
         { src: 'VIIRS_NOAA20_SP', time_utc: '2023-09-23T18:42:00Z', distance_km: 1.4, confidence: 'n', frp: 3.2, lat: -2.198, lon: 113.932 },
@@ -211,13 +194,14 @@ const DEFS: ClusterDef[] = [
   },
   {
     id: 'C-0924-001',
+    heat: 0.3, // seberapa luas dan kuat titik panas di citra termal (0–1)
     province: '62',
     pixels: C001,
     attrs: { u_H: 1.0, u_G: 0.85, u_LST: 0.4, u_SAT: 0.2, u_T: 1.0 },
     neighbours: ['normal', 'normal', 'normal', 'normal', 'anomaly', 'normal', 'anomaly', 'non_peat'],
     trigger: AS_OF,
     nights: [
-      { date: '2023-09-22', from: 0.12, to: 0.2, clouds: [[38, 47]] },
+      { date: '2023-09-22', from: 0.18, to: 0.33, clouds: [[38, 47]] },
       { date: '2023-09-23', from: 0.24, to: 0.42 },
       { date: '2023-09-24', from: 0.4, to: 0.71, end: 13, clouds: [[2, 4]] },
     ],
@@ -239,13 +223,14 @@ const DEFS: ClusterDef[] = [
       ],
       images: [
         { source: 'viirs_image', url: gibsUrl([114.14, -2.46], '2023-09-24'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7, marker_drawn: false },
-        { source: 'himawari_image', url: himawariSvg(0.3), layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
+        { source: 'himawari_image', url: '', layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
       ],
       viirs: [],
     },
   },
   {
     id: 'C-0923-001',
+    heat: 0.8, // seberapa luas dan kuat titik panas di citra termal (0–1)
     province: '62',
     pixels: C923,
     attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.8, u_SAT: 0.5, u_T: 1.0 },
@@ -274,7 +259,7 @@ const DEFS: ClusterDef[] = [
       ],
       images: [
         { source: 'viirs_image', url: gibsUrl([113.69, -2.05], '2023-09-23'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-23T06:30:00Z', age_h: 10.2, marker_drawn: false },
-        { source: 'himawari_image', url: himawariSvg(0.8), layer: 'Himawari-9 B07', observed_at: '2023-09-23T16:40:00Z', age_h: 0, marker_drawn: false },
+        { source: 'himawari_image', url: '', layer: 'Himawari-9 B07', observed_at: '2023-09-23T16:40:00Z', age_h: 0, marker_drawn: false },
       ],
       viirs: [
         { src: 'VIIRS_NOAA20_SP', time_utc: '2023-09-23T06:12:00Z', distance_km: 0.9, confidence: 'n', frp: 6.4, lat: -2.046, lon: 113.697 },
@@ -284,6 +269,7 @@ const DEFS: ClusterDef[] = [
   },
   {
     id: 'C-0924-003',
+    heat: 0.95, // seberapa luas dan kuat titik panas di citra termal (0–1)
     province: '16',
     pixels: C003,
     attrs: { u_H: 1.0, u_G: 1.0, u_LST: 0.6, u_SAT: 0.4, u_T: 1.0 },
@@ -312,7 +298,7 @@ const DEFS: ClusterDef[] = [
       ],
       images: [
         { source: 'viirs_image', url: gibsUrl([105.63, -3.36], '2023-09-24'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7, marker_drawn: false },
-        { source: 'himawari_image', url: himawariSvg(0.95), layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
+        { source: 'himawari_image', url: '', layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
       ],
       viirs: [
         { src: 'VIIRS_NOAA20_SP', time_utc: '2023-09-24T06:20:00Z', distance_km: 0.7, confidence: 'h', frp: 12.3, lat: -3.357, lon: 105.626 },
@@ -323,6 +309,7 @@ const DEFS: ClusterDef[] = [
   },
   {
     id: 'C-0924-004',
+    heat: 0.4, // seberapa luas dan kuat titik panas di citra termal (0–1)
     province: '14',
     pixels: C004,
     attrs: { u_H: 0.95, u_G: 0.9, u_LST: 0.3, u_SAT: 0.0, u_T: 1.0 },
@@ -351,7 +338,7 @@ const DEFS: ClusterDef[] = [
       ],
       images: [
         { source: 'viirs_image', url: gibsUrl([102.76, 0.34], '2023-09-24'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-24T06:30:00Z', age_h: 8.7, marker_drawn: false },
-        { source: 'himawari_image', url: himawariSvg(0.4), layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
+        { source: 'himawari_image', url: '', layer: 'Himawari-9 B07', observed_at: AS_OF, age_h: 0, marker_drawn: false },
       ],
       viirs: [
         { src: 'VIIRS_SNPP_SP', time_utc: '2023-09-24T06:10:00Z', distance_km: 6.3, confidence: 'l', frp: 2.2, lat: 0.39, lon: 102.81 },
@@ -360,6 +347,7 @@ const DEFS: ClusterDef[] = [
   },
   {
     id: 'C-0915-001',
+    heat: 0.5, // seberapa luas dan kuat titik panas di citra termal (0–1)
     state: 'closed',
     province: '61',
     pixels: C915,
@@ -367,7 +355,7 @@ const DEFS: ClusterDef[] = [
     neighbours: ['normal', 'anomaly', 'normal', 'anomaly', 'normal', 'non_peat', 'normal', 'normal'],
     trigger: T915,
     nights: [
-      { date: '2023-09-13', from: 0.18, to: 0.34 },
+      { date: '2023-09-13', from: 0.14, to: 0.27 },
       { date: '2023-09-14', from: 0.3, to: 0.52, clouds: [[12, 20]] },
       { date: '2023-09-15', from: 0.48, to: 0.74, peakAt: 21 },
     ],
@@ -389,7 +377,7 @@ const DEFS: ClusterDef[] = [
       ],
       images: [
         { source: 'viirs_image', url: gibsUrl([109.56, -0.35], '2023-09-15'), layer: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor', observed_at: '2023-09-15T06:30:00Z', age_h: 10, marker_drawn: false },
-        { source: 'himawari_image', url: himawariSvg(0.5), layer: 'Himawari-9 B07', observed_at: T915, age_h: 0, marker_drawn: false },
+        { source: 'himawari_image', url: '', layer: 'Himawari-9 B07', observed_at: T915, age_h: 0, marker_drawn: false },
       ],
       viirs: [
         { src: 'VIIRS_NOAA20_SP', time_utc: '2023-09-15T06:05:00Z', distance_km: 4.8, confidence: 'n', frp: 3.6, lat: -0.32, lon: 109.59 },
@@ -413,8 +401,47 @@ function centroid(px: LngLat[]): LngLat {
   return [r2(px.reduce((s, p) => s + p[0], 0) / n), r2(px.reduce((s, p) => s + p[1], 0) / n)];
 }
 
+/** Jangkauan crop dari parameter BBOX (lat_s,lon_w,lat_n,lon_e) di URL GIBS WMS. */
+function viirsBbox(url: string): [number, number, number, number] {
+  const [s, w, n, e] = new URL(url).searchParams.get('BBOX')!.split(',').map(Number);
+  return [w, s, e, n];
+}
+
+interface Extras { images: EvidenceImg[]; details: Record<AttrKey, AttrDetail> }
+const extrasCache = new Map<string, Extras>();
+
+/** Citra termal + angka terukur per atribut; dibangun sekali per kelompok dari satu grid suhu. */
+function extrasOf(d: ClusterDef, uN8: number, series: SeriesPoint[]): Extras {
+  const hit = extrasCache.get(d.id);
+  if (hit) return hit;
+  const seed = [...d.id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  const centre = centroid(d.pixels);
+  const crop = buildThermal({
+    centre, pixels: d.pixels, rep: d.pixels[0], heat: d.heat, seed, cloudNear: d.id === 'C-0924-004',
+    targets: {
+      himawari: rawFromU(d.attrs.u_H ?? 0, ATTR_SCALES.u_H, seed, 0.4 + 8 * d.heat),
+      gk2a: rawFromU(d.attrs.u_G ?? 0, ATTR_SCALES.u_G, seed + 5, 0.4 + 7 * d.heat),
+    },
+  });
+  const peaks = new Map<string, number>();
+  for (const p of series) if (p.U != null) peaks.set(p.slot.slice(0, 10), Math.max(peaks.get(p.slot.slice(0, 10)) ?? 0, p.U));
+  const out: Extras = {
+    images: d.verification.images.map((img) => (img.source === 'himawari_image'
+      ? { ...img, url: himawariImageUrl(crop, `${img.layer} · mock`, seed), bbox: crop.bbox, thermal: crop }
+      : { ...img, bbox: viirsBbox(img.url) })),
+    details: attributeDetails({
+      attrs: d.attrs, neighbourAnomalies: Math.round(uN8 * 8), crop, rep: cropCell(crop.bbox, d.pixels[0]), seed,
+      nightPeaks: [...peaks].map(([night, peak]) => ({ night, peak })),
+    }),
+  };
+  extrasCache.set(d.id, out);
+  return out;
+}
+
 function toDetail(d: ClusterDef): ClusterDetail {
   const uN = d.neighbours.filter((s) => s === 'anomaly').length / 8;
+  const series = buildSeries(d.nights, d.pixels.length);
+  const extras = extrasOf(d, uN, series);
   return {
     id: d.id,
     state: d.state ?? 'active',
@@ -427,18 +454,19 @@ function toDetail(d: ClusterDef): ClusterDetail {
     neighbour_support: uN,
     n_sat: 2,
     attributes: d.attrs,
-    series: buildSeries(d.nights, d.pixels.length),
+    attribute_details: extras.details,
+    series,
     neighbours: d.neighbours.map((state, i) => ({
       dir: DIRS[i], state,
       u0: state === 'anomaly' ? r2(0.5 + rand(i, 3) * 0.4) : state === 'normal' ? r2(rand(i, 5) * 0.4) : null,
     })),
-    verification: d.verification,
+    verification: { ...d.verification, images: extras.images },
     decision: decisions.get(d.id) ?? null,
   };
 }
 
 function toSummary(d: ClusterDetail): ClusterSummary {
-  const { attributes: _a, series: _s, neighbours: _n, verification: v, ...rest } = d;
+  const { attributes: _a, attribute_details: _d, series: _s, neighbours: _n, verification: v, ...rest } = d;
   return {
     ...rest,
     verification: v && { result: v.result, viirs_within_2km_48h: v.viirs_within_2km_48h, tool_calls: v.tool_calls, at: v.at },

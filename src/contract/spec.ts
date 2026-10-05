@@ -277,6 +277,7 @@ export const SCHEMAS: Schema[] = [
     fields: [
       { name: '…ClusterSummary', type: '—', req: true, desc: t('Semua field ClusterSummary.', 'All ClusterSummary fields.') },
       { name: 'attributes', type: 'Record<u_H|u_G|u_LST|u_SAT|u_T, number | null>', req: true, desc: t('Atribut MAUT di trigger_slot; null = tidak tersedia (mis. satelit berawan). u_N = neighbour_support.', 'MAUT attributes at trigger_slot; null = not available (e.g. cloudy satellite). u_N = neighbour_support.') },
+      { name: 'attribute_details', type: 'Record<u_H|u_G|u_LST|u_SAT|u_T|u_N, AttrDetail>', req: false, origin: 'fe', desc: t('Angka terukur di balik tiap u (mis. anomali B07−B14 dalam K) untuk tabel atribut. Tanpa ini tabel hanya menampilkan u dan bobot.', 'Measured numbers behind each u (e.g. the B07−B14 anomaly in K) for the attribute table. Without it the table shows only u and the weight.') },
       { name: 'series', type: 'SeriesPoint[]', req: true, desc: t('Semua slot 3 malam valid terakhir untuk rep_pixel, urut waktu.', 'Every slot of the last 3 valid nights for rep_pixel, in time order.') },
       { name: 'neighbours', type: 'Neighbour[8]', req: true, origin: 'fe', desc: t('8 tetangga rep_pixel untuk mini-grid 3 × 3.', 'The 8 neighbours of rep_pixel for the 3 × 3 mini grid.') },
       { name: 'verification', type: 'VerificationDetail | null', req: true, desc: t('Hasil agen lengkap.', 'Full agent result.') },
@@ -289,6 +290,27 @@ export const SCHEMAS: Schema[] = [
       { name: 'slot', type: ISO, req: true, desc: t('Slot 10 menit, 13.00–20.50 UTC.', '10-minute slot, 13:00–20:50 UTC.') },
       { name: 'U', type: 'number 0–1 | null', req: true, origin: 'fe', desc: t('null = NO_OBSERVATION (diarsir di grafik).', 'null = NO_OBSERVATION (hatched on the chart).') },
       { name: 'status', type: STATUS_T, req: true, desc: t('Status slot itu.', 'Status at that slot.') },
+    ],
+  },
+  {
+    name: 'AttrDetail', origin: 'fe',
+    desc: t('Angka terukur di balik satu atribut u. u = clamp((value − scale[0]) ÷ (scale[1] − scale[0]), 0, 1); backend yang menentukan skalanya.', 'The measured number behind one attribute u. u = clamp((value − scale[0]) ÷ (scale[1] − scale[0]), 0, 1); the backend owns the scale.'),
+    fields: [
+      { name: 'value', type: 'number | null', req: true, desc: t('Angka yang dinormalisasi. null = atribut tidak tersedia. u_H/u_G: anomali (panas − acuan) piksel perwakilan terhadap median crop, K. u_LST/u_SAT: selisih LST satelit dengan acuan TS/T2M NASA POWER, K. u_T: jumlah malam yang anomali. u_N: jumlah tetangga U0 ≥ 0,5.', 'The normalised number. null = attribute unavailable. u_H/u_G: anomaly (hot − reference) of the representative pixel against the crop median, K. u_LST/u_SAT: satellite LST minus the NASA POWER TS/T2M reference, K. u_T: number of anomalous nights. u_N: number of neighbours with U0 ≥ 0.5.') },
+      { name: 'unit', type: "'K' | 'malam' | 'piksel'", req: true, desc: t('Satuan value.', 'Unit of value.') },
+      { name: 'scale', type: '[number, number]', req: true, desc: t('value untuk u = 0 dan u = 1.', 'value for u = 0 and u = 1.') },
+      { name: 'parts', type: 'AttrPart[]', req: true, desc: t('Angka pendukung yang ikut dihitung; boleh kosong.', 'Supporting numbers used in the calculation; may be empty.') },
+    ],
+  },
+  {
+    name: 'AttrPart', origin: 'fe',
+    desc: t('Satu angka pendukung pada AttrDetail.', 'One supporting number in an AttrDetail.'),
+    fields: [
+      { name: 'key', type: 'string', req: true, desc: t('b07 | b14 | sw038 | ir105 (suhu kecerahan di piksel perwakilan), dt (panas − acuan), bg_dt dan sigma (median dan simpangan latar crop), lst, ts, t2m, night_peak (U puncak satu malam). Kunci tak dikenal diabaikan.', 'b07 | b14 | sw038 | ir105 (brightness temperature at the representative pixel), dt (hot − reference), bg_dt and sigma (crop background median and spread), lst, ts, t2m, night_peak (peak U of one night). Unknown keys are ignored.') },
+      { name: 'value', type: 'number | null', req: true, desc: t('Angkanya.', 'The number.') },
+      { name: 'unit', type: "'K' | 'U'", req: true, desc: t('K = kelvin atau selisih kelvin, U = nilai utilitas 0–1.', 'K = kelvin or a kelvin difference, U = a 0–1 utility value.') },
+      { name: 'abs', type: 'boolean', req: false, desc: t('true = suhu mutlak (UI menampilkan °C dan K); selain itu selisih atau angka biasa.', 'true = absolute temperature (the UI shows °C and K); otherwise a difference or plain number.') },
+      { name: 'at', type: 'YYYY-MM-DD', req: false, desc: t('Hanya night_peak: malam yang dimaksud.', 'night_peak only: the night concerned.') },
     ],
   },
   {
@@ -345,6 +367,28 @@ export const SCHEMAS: Schema[] = [
       { name: 'observed_at', type: ISO, req: true, desc: t('Waktu citra.', 'Image time.') },
       { name: 'age_h', type: 'number', req: true, desc: t('Umur citra (jam).', 'Image age (hours).') },
       { name: 'marker_drawn', type: 'boolean', req: true, desc: t('true bila penanda 5 km sudah digambar di PNG; false → UI menggambarnya.', 'true when the 5 km marker is drawn on the PNG; false → the UI draws it.') },
+      { name: 'bbox', type: '[lon_w, lat_s, lon_e, lat_n]', req: false, desc: t('Jangkauan crop persis seperti citra (sumbu linear lon/lat). UI memakainya untuk koordinat di tooltip dan menaruh titik VIIRS; tanpa ini UI mengira ±0,2° dari centroid.', 'Exact extent of the crop (linear lon/lat axes). The UI uses it for tooltip coordinates and to place VIIRS points; without it the UI assumes ±0.2° around the centroid.') },
+      { name: 'thermal', type: 'ThermalCrop', req: false, desc: t('Hanya himawari_image. Suhu per sel di balik citra, untuk tooltip suhu. Tanpa ini citra tampil tanpa tooltip.', 'himawari_image only. Per-cell temperatures behind the image, for the temperature tooltip. Without it the image shows no tooltip.') },
+    ],
+  },
+  {
+    name: 'ThermalCrop', origin: 'fe',
+    desc: t('Suhu kecerahan per sel di balik citra termal. Sel = piksel asli satelit (≈ 2 km), jadi crop ±0,2° berisi 20 × 20 sel.', 'Brightness temperature per cell behind the thermal image. A cell is a native satellite pixel (≈ 2 km), so a ±0.2° crop holds 20 × 20 cells.'),
+    fields: [
+      { name: 'bbox', type: '[lon_w, lat_s, lon_e, lat_n]', req: true, desc: t('Sama dengan EvidenceImg.bbox. Sel (0, 0) di pojok barat laut.', 'Same as EvidenceImg.bbox. Cell (0, 0) is the north-west corner.') },
+      { name: 'cols', type: 'integer', req: true, desc: t('Jumlah kolom (barat → timur).', 'Number of columns (west → east).') },
+      { name: 'rows', type: 'integer', req: true, desc: t('Jumlah baris (utara → selatan).', 'Number of rows (north → south).') },
+      { name: 'bands', type: 'ThermalBand[]', req: true, desc: t('Kanal panas dan kanal acuan tiap satelit: Himawari-9 B07 + B14, GK2A SW038 + IR105. Satelit yang tidak tersedia boleh dihilangkan.', 'Hot and reference channel of each satellite: Himawari-9 B07 + B14, GK2A SW038 + IR105. An unavailable satellite may be omitted.') },
+    ],
+  },
+  {
+    name: 'ThermalBand', origin: 'fe',
+    desc: t('Satu kanal pada ThermalCrop.', 'One channel in a ThermalCrop.'),
+    fields: [
+      { name: 'sat', type: "'himawari' | 'gk2a'", req: true, desc: t('Satelit asal.', 'Source satellite.') },
+      { name: 'band', type: 'string', req: true, desc: t('B07 / B14 (Himawari), SW038 / IR105 (GK2A).', 'B07 / B14 (Himawari), SW038 / IR105 (GK2A).') },
+      { name: 'um', type: 'number', req: true, desc: t('Panjang gelombang tengah, µm. < 5 = kanal panas (3,8–3,9), ≥ 5 = kanal acuan (10–11); UI memakainya untuk memasangkan kanal.', 'Centre wavelength, µm. < 5 = hot channel (3.8–3.9), ≥ 5 = reference channel (10–11); the UI uses it to pair channels.') },
+      { name: 'values', type: '(number | null)[]', req: true, desc: t('cols × rows suhu kecerahan, baris atas dulu, kelvin 1 desimal. null = tertutup awan / tidak teramati.', 'cols × rows brightness temperatures, top row first, kelvin to 1 decimal. null = cloud-covered / not observed.') },
     ],
   },
   {
