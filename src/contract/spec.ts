@@ -311,7 +311,7 @@ export const SCHEMAS: Schema[] = [
     fields: [
       { name: 'source', type: "'rule_engine'|'viirs_firms'|'viirs_image'|'himawari_image'", req: true, desc: t('Asal bukti.', 'Evidence source.') },
       { name: 'finding', type: 'string ≤ 200', req: true, desc: t('Temuan, Bahasa Indonesia. Angka harus ada di hasil tool.', 'Finding, in Indonesian. Every number must exist in a tool result.') },
-      { name: 'finding_en', type: 'string ≤ 200', req: true, origin: 'fe', desc: t('Temuan yang sama dalam bahasa Inggris, untuk UI versi Inggris.', 'The same finding in English, for the English UI.') },
+      { name: 'finding_en', type: 'string ≤ 200', req: true, desc: t('Temuan yang sama dalam bahasa Inggris, untuk UI versi Inggris.', 'The same finding in English, for the English UI.') },
       { name: 'observed_at', type: `${ISO} | null`, req: true, desc: t('Waktu pengamatan bukti.', 'When the evidence was observed.') },
       { name: 'age_h', type: 'number | null', req: true, desc: t('Umur bukti terhadap trigger_slot (jam).', 'Evidence age relative to trigger_slot (hours).') },
     ],
@@ -494,7 +494,7 @@ export const ENDPOINTS: Endpoint[] = [
     usedBy: t('Peta → panel daftar kelompok (UI mengurutkan menurut utility atau trigger_slot), keadaan "kosong".', 'Map → cluster list panel (the UI sorts by utility or trigger_slot), "empty" state.'),
     params: [
       { name: 'state', type: "query · 'active' | 'closed'", req: false, origin: 'backend', desc: t('Default active. UI memakai active untuk malam terbaru.', 'Default active. The UI uses active for the latest night.') },
-      { name: 'night', type: 'query · YYYY-MM-DD', req: false, origin: 'fe', desc: t('Malam arsip: kelompok yang AWAS di salah satu slot malam itu, apa pun state-nya (first_awas_at ≤ akhir malam dan last_awas_at ≥ awal malam). Bila diisi, `state` diabaikan.', 'Archive night: clusters that were AWAS in any slot that night, whatever their state (first_awas_at ≤ night end and last_awas_at ≥ night start). When set, `state` is ignored.') },
+      { name: 'night', type: 'query · YYYY-MM-DD', req: false, origin: 'backend', desc: t('Malam arsip: kelompok yang AWAS di salah satu slot malam itu, apa pun state-nya (first_awas_at ≤ akhir malam dan last_awas_at ≥ awal malam). Bila diisi, `state` diabaikan.', 'Archive night: clusters that were AWAS in any slot that night, whatever their state (first_awas_at ≤ night end and last_awas_at ≥ night start). When set, `state` is ignored.') },
       AS_OF_PARAM,
     ],
     responses: [{ code: 200, schema: 'ClusterSummary', example: 'clusters', note: t('ClusterSummary[].', 'ClusterSummary[].') }],

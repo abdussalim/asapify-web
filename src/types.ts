@@ -87,7 +87,7 @@ export type EvidenceSource = 'rule_engine' | 'viirs_firms' | 'viirs_image' | 'hi
 export interface Evidence {
   source: EvidenceSource;
   finding: string; // Bahasa Indonesia
-  finding_en: string; // FE
+  finding_en: string;
   observed_at: string | null;
   age_h: number | null;
 }
