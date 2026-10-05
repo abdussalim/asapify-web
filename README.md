@@ -97,7 +97,8 @@ Halaman `/kelompok/:id` menampilkan angka, bukan hanya bobot:
   rumus `U = Σ w·u ÷ Σ w` dengan angkanya. Sorot batang u untuk melihat rumus normalisasinya.
 - **Data.** `EvidenceImg.thermal` (grid `ThermalCrop`, 4 kanal × 20 × 20 sel) dan `ClusterDetail.attribute_details` adalah
   **usulan FE** yang belum ada di `backend.html`; keduanya opsional (tanpa itu citra tampil tanpa tooltip dan tabel hanya
-  berisi u dan bobot). Skema ada di tab Kontrak API. Mode mock membangun citra, tooltip, dan tabel dari satu grid suhu
+  berisi u dan bobot; `u_N` tetap dihitung dari tetangga, dan `EvidenceImg.bbox` yang hilang dianggap ±0,2° dari
+  koordinat kelompok). Skema ada di tab Kontrak API. Mode mock membangun citra, tooltip, dan tabel dari satu grid suhu
   fiktif, jadi angkanya selalu sepakat dan terhubung ke `u` di fixture (`src/mock/thermal.ts`).
 
 ## Gerak

@@ -1,8 +1,8 @@
 import { useId, useRef, useState } from 'react';
 import type { AttrDetail, AttrKey, AttrPart, Attributes } from '../types';
 import { useI18n } from '../i18n';
-import { fmtC, fmtDate, fmtNum, fmtSigned } from '../lib/format';
-import { ATTR_ORDER, T_AWAS, utility } from '../lib/maut';
+import { fmtC, fmtDate, fmtNum, fmtNumM, fmtSigned } from '../lib/format';
+import { ATTR_ORDER, T_AWAS, T_WATCH, utility } from '../lib/maut';
 import { m, springSoft } from '../motion';
 import { FloatingTip } from './FloatingTip';
 
@@ -18,26 +18,32 @@ const grow = (pct: number, i: number) => ({
   initial: { width: 0 }, whileInView: { width: `${pct}%` }, viewport: { once: true }, transition: { ...springSoft, delay: i * 0.06 },
 });
 
-/** Angka terukur di baris atribut, mis. "+18,6 K" atau "2 dari 3 malam". */
+const hasScale = (d: AttrDetail) => Array.isArray(d.scale) && d.scale.length === 2;
+
+/** Angka terukur di baris atribut, mis. "+18,6 K" atau "2 dari 3 malam"; satuan yang tak dikenal ditulis apa adanya. */
 function useMeasured() {
   const { t, lang } = useI18n();
   return (d: AttrDetail): string => {
     if (d.value == null) return t('attr.na');
     if (d.unit === 'K') return `${fmtSigned(d.value, 1, lang)} K`;
-    return t(`attrd.val.${d.unit}`, { v: fmtNum(d.value, 0, lang), n: fmtNum(d.scale[1], 0, lang) });
+    if ((d.unit === 'malam' || d.unit === 'piksel') && hasScale(d)) return t(`attrd.val.${d.unit}`, { v: fmtNum(d.value, 0, lang), n: fmtNum(d.scale[1], 0, lang) });
+    return `${fmtNumM(d.value, 1, lang)} ${d.unit}`;
   };
 }
+
+/** Batas skala: bulat bila bulat, selain itu 1 desimal (skala dimiliki backend, bisa pecahan). */
+const fmtScale = (v: number, lang: 'id' | 'en') => (Number.isInteger(v) ? fmtNum(v, 0, lang) : fmtNum(v, 1, lang));
 
 /** Satu angka pendukung: suhu mutlak dalam °C (K di title), selisih bertanda, σ polos, U puncak dengan tanggalnya. */
 function Part({ p }: { p: AttrPart }) {
   const { t, lang } = useI18n();
-  const label = p.key === 'night_peak' && p.at ? t('attrd.part.night_peak', { date: fmtDate(`${p.at}T13:00:00Z`, lang) }) : t(`attrd.part.${p.key}`);
+  const label = p.key === 'night_peak' ? t('attrd.part.night_peak', { date: p.at ? fmtDate(`${p.at}T13:00:00Z`, lang) : '' }).trim() : t(`attrd.part.${p.key}`);
   if (label === `attrd.part.${p.key}`) return null; // kunci tak dikenal diabaikan
   let text = '—', title: string | undefined;
   if (p.value != null) {
     if (p.abs) { text = fmtC(p.value, lang); title = `${fmtNum(p.value, 1, lang)} K`; }
     else if (p.unit === 'U') text = fmtNum(p.value, 2, lang);
-    else text = p.key === 'sigma' ? `${fmtNum(p.value, 1, lang)} K` : `${fmtSigned(p.value, 1, lang)} K`;
+    else text = p.key === 'sigma' ? `${fmtNum(p.value, 2, lang)} K` : `${fmtSigned(p.value, 1, lang)} K`;
   }
   return <span className="attr-part" title={title}><span>{label}</span> <b>{text}</b></span>;
 }
@@ -48,10 +54,10 @@ function Bar({ k, u, d, index }: { k: AttrKey; u: number | null; d?: AttrDetail;
   const id = useId();
   const el = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
-  const calc = d && d.value != null && u != null ? (() => {
+  const calc = d && d.value != null && u != null && hasScale(d) ? (() => {
     const [lo, hi] = d.scale;
     const raw = (d.value - lo) / (hi - lo);
-    const f = (v: number) => fmtNum(v, d.unit === 'K' ? 1 : 0, lang);
+    const f = (v: number) => (d.unit === 'K' ? fmtNumM(v, 1, lang) : fmtScale(v, lang)).replace('-', '−');
     return {
       text: t('attrd.calc', { v: f(d.value), lo: f(lo), hi: f(hi), u: fmtNum(u, 2, lang) }),
       clip: raw > 1.005 ? t('attrd.clip_hi') : raw < -0.005 ? t('attrd.clip_lo') : null,
@@ -117,20 +123,20 @@ export function AttributeBars({ attributes, neighbourSupport, weights, details }
           <div className={`attr${u == null ? ' na' : ''}`} key={k}>
             <span className="attr-name">
               <span>{t(`attr.${k}`)} <code>{k}</code></span>
-              {anyDetail && d ? <small>{t(`attrd.head.${k}`)}</small> : u == null ? <small>{t('attr.na')}</small> : null}
+              {anyDetail && d ? <small>{k === 'u_T' ? t('attrd.head.u_T_t', { t: f2(T_WATCH) }) : t(`attrd.head.${k}`)}</small> : u == null ? <small>{t('attr.na')}</small> : null}
             </span>
             {anyDetail && <b className="attr-meas">{d ? measured(d) : ''}</b>}
             <Bar k={k} u={u} d={d} index={i} />
             <span className="attr-nums">
-              <b className={`attr-u${u == null ? ' na' : ''}`}>{u == null ? '—' : f2(u)}</b>
+              <b className={`attr-u${u == null ? ' na' : ''}`}><span className="lab">u </span>{u == null ? '—' : f2(u)}</b>
               <small className="attr-w"><span className="lab">{t('attr.col_w')} </span>{f2(w)}</small>
               <small className="attr-c"><span className="lab">{t('attr.col_c')} </span>{u == null ? '—' : f2(w * u)}</small>
             </span>
-            {anyDetail && d && (parts.length > 0 || d.unit === 'K') && (
+            {anyDetail && d && (parts.length > 0 || hasScale(d)) && (
               <p className="attr-parts">
                 {parts.map((p, j) => <Part key={`${p.key}${p.at ?? j}`} p={p} />)}
-                {d.unit === 'K' && d.value != null && (
-                  <span className="attr-scale">{t('attrd.scale', { lo: `${fmtNum(d.scale[0], 0, lang)} ${d.unit}`, hi: `${fmtNum(d.scale[1], 0, lang)} ${d.unit}` })}</span>
+                {d.value != null && hasScale(d) && (
+                  <span className="attr-scale">{t('attrd.scale', { lo: `${fmtScale(d.scale[0], lang)} ${d.unit}`, hi: `${fmtScale(d.scale[1], lang)} ${d.unit}` })}</span>
                 )}
               </p>
             )}
@@ -140,7 +146,7 @@ export function AttributeBars({ attributes, neighbourSupport, weights, details }
 
       <div className="attr total">
         <span className="attr-name"><span>{t('attr.total')}</span></span>
-        {anyDetail && <b className="attr-meas thr">{t('status.awas')} ≥ {f2(T_AWAS)}</b>}
+        {anyDetail && <b className="attr-meas thr">{t('attr.threshold', { t: f2(T_AWAS) })}</b>}
         <span className="attr-bar" aria-hidden="true">
           <m.i {...grow(U * 100, ATTR_ORDER.length)} className={U >= T_AWAS ? 'hot' : ''} />
           <em style={{ left: `${T_AWAS * 100}%` }} />

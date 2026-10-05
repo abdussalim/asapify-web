@@ -1,6 +1,6 @@
 import type { ViirsDetection } from '../types';
 import { useI18n } from '../i18n';
-import { fmtC, fmtNum, fmtSigned, fmtSlot } from '../lib/format';
+import { fmtC, fmtNum, fmtNumM, fmtSigned, fmtSlot } from '../lib/format';
 import { SAT_NAME, thermalColor, type SatReading } from '../lib/thermal';
 import { IconCloud, IconCrosshair } from './icons';
 
@@ -17,14 +17,17 @@ interface ThermalProps {
   km: number; // jarak dari penanda
   member: boolean;
   rep: boolean;
+  /** Anomali (K) mulai dihitung panas; dari skala atribut u_H. Tanpa ini dipakai z ≥ 3. */
+  hotFrom?: number;
 }
 
 /** Isi tooltip citra termal: suhu tiap kanal kedua satelit di sel yang ditunjuk. */
-export function ThermalTip({ readings, pixelId, lon, lat, km, member, rep }: ThermalProps) {
+export function ThermalTip({ readings, pixelId, lon, lat, km, member, rep, hotFrom }: ThermalProps) {
   const { t, lang } = useI18n();
   const observed = readings.filter((r) => r.hot.k != null || r.ref.k != null);
   const first = readings.find((r) => r.hot.k != null);
   const k1 = (v: number) => fmtNum(v, 1, lang);
+  const isHot = (r: SatReading) => r.anomaly != null && (hotFrom != null ? r.anomaly >= hotFrom : r.z != null && r.z >= 3);
   const temp = (k: number | null, band: string) => (k == null
     ? <span className="muted">—</span>
     : <><b>{fmtC(k, lang)}</b><small>{band} · {k1(k)} K</small></>);
@@ -36,8 +39,10 @@ export function ThermalTip({ readings, pixelId, lon, lat, km, member, rep }: The
         <b className="mono">{pixelId}</b>
         {(rep || member) && <span className="tip-tag">{t(rep ? 'probe.rep' : 'probe.member')}</span>}
       </div>
-      <div className="tip-sub">{fmtNum(lat, 3, lang)}°, {fmtNum(lon, 3, lang)}° · {t('probe.from_marker', { km: fmtNum(km, 1, lang) })}</div>
-      {!observed.length ? (
+      <div className="tip-sub">{fmtNumM(lat, 3, lang)}°, {fmtNumM(lon, 3, lang)}° · {t('probe.from_marker', { km: fmtNum(km, 1, lang) })}</div>
+      {!readings.length ? (
+        <p className="tip-cloud">{t('probe.no_data')}</p>
+      ) : !observed.length ? (
         <p className="tip-cloud"><IconCloud size={13} />{t('probe.cloud')}</p>
       ) : (
         <>
@@ -58,14 +63,19 @@ export function ThermalTip({ readings, pixelId, lon, lat, km, member, rep }: The
 
             <span className="tip-row">{t('probe.row_anom')}</span>
             {readings.map((r) => (
-              <span key={r.sat} className={`tip-cell${r.z != null && r.z >= 3 ? ' hot' : ''}`}>
+              <span key={r.sat} className={`tip-cell${isHot(r) ? ' hot' : ''}`}>
                 {r.anomaly == null || r.z == null
                   ? <span className="muted">—</span>
                   : <><b>{fmtSigned(r.anomaly, 1, lang)} K</b><small>{t('probe.z', { z: fmtNum(r.z, 1, lang) })}</small></>}
               </span>
             ))}
+
+            <span className="tip-row">{t('probe.row_bg')}</span>
+            {readings.map((r) => (
+              <span key={r.sat} className="tip-cell"><b>{fmtSigned(r.bgDt, 1, lang)} K</b><small>σ {fmtNum(r.sigma, 2, lang)} K</small></span>
+            ))}
           </div>
-          {first && <div className="tip-foot">{t('probe.bg', { dt: fmtSigned(first.bgDt, 1, lang), sigma: k1(first.sigma) })}</div>}
+          <div className="tip-foot">{t('probe.note')}</div>
         </>
       )}
     </>
@@ -77,7 +87,7 @@ export function CoordTip({ lon, lat, km }: { lon: number; lat: number; km: numbe
   const { t, lang } = useI18n();
   return (
     <>
-      <div className="tip-head"><IconCrosshair size={13} /><b className="mono">{fmtNum(lat, 3, lang)}°, {fmtNum(lon, 3, lang)}°</b></div>
+      <div className="tip-head"><IconCrosshair size={13} /><b className="mono">{fmtNumM(lat, 3, lang)}°, {fmtNumM(lon, 3, lang)}°</b></div>
       <div className="tip-sub">{t('probe.from_marker', { km: fmtNum(km, 1, lang) })}</div>
     </>
   );

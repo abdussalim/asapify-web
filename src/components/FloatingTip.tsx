@@ -39,11 +39,20 @@ export function FloatingTip({ open, id, anchor, anchorKey, children }: Props) {
     const vw = document.documentElement.clientWidth, vh = window.innerHeight;
     const cx = a.left + a.width / 2;
     const left = Math.min(Math.max(cx - w / 2, PAD), Math.max(PAD, vw - w - PAD));
-    const roomAbove = a.top - PAD, roomBelow = vh - a.bottom - PAD;
+    // jangan menutupi bilah atas yang menempel di layar
+    const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar')) || 0;
+    const minTop = bar + PAD;
+    const roomAbove = a.top - minTop, roomBelow = vh - a.bottom - PAD;
     const below = roomAbove < h + GAP && roomBelow > roomAbove;
-    const top = Math.min(Math.max(below ? a.bottom + GAP : a.top - h - GAP, PAD), Math.max(PAD, vh - h - PAD));
-    // pertama kali: langsung di tempat (tanpa terbang dari pojok); selanjutnya meluncur
-    if (!placed.current || instant) { x.jump(left); y.jump(top); placed.current = true; } else { x.set(left); y.set(top); }
+    const top = Math.min(Math.max(below ? a.bottom + GAP : a.top - h - GAP, minTop), Math.max(minTop, vh - h - PAD));
+    if (document.documentElement.classList.contains('no-motion')) {
+      // fitur gerak gagal dimuat: nilai pegas tidak dirender, jadi pasang posisi langsung
+      node.style.left = `${left}px`; node.style.top = `${top}px`; node.style.transform = 'none';
+    } else if (!placed.current || instant) {
+      // pertama kali: langsung di tempat (tanpa terbang dari pojok); selanjutnya meluncur
+      x.jump(left); y.jump(top);
+    } else { x.set(left); y.set(top); }
+    placed.current = true;
     setArrow((p) => (p.x === Math.round(cx - left) && p.below === below ? p : { x: Math.round(cx - left), below }));
   }, [instant, x, y]);
 

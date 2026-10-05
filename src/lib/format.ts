@@ -54,5 +54,8 @@ export function fmtSigned(n: number, digits: number, lang: Lang): string {
   return `${n < 0 && Number(s.replace(',', '.')) !== 0 ? '−' : '+'}${s}`;
 }
 
+/** Angka biasa dengan tanda minus sungguhan (U+2212) untuk koordinat dan nilai di tooltip. */
+export const fmtNumM = (n: number, digits: number, lang: Lang) => fmtNum(n, digits, lang).replace('-', '−');
+
 /** Suhu kecerahan K → "38,4 °C". */
 export const fmtC = (k: number, lang: Lang) => `${fmtNum(k - 273.15, 1, lang)} °C`;

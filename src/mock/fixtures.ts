@@ -3,9 +3,10 @@ import {
   type Api, type AttrDetail, type AttrKey, type Attributes, type Basemap, type ClusterDetail, type ClusterSummary, type Decision, type EvidenceImg, type Grid,
   type GridCompact, type LngLat, type Meta, type Neighbour, type NeighbourDir, type NightCompact, type NightSummary,
   type PeatBoundary, type PixelIndex, type ProvinceBoundary, type ProvinceCode, type SeriesPoint, type Status, type StatusCode,
-  type VerificationDetail,
+  type VerificationDetail, type ViirsDetection,
 } from '../types';
 import { T_AWAS, T_WATCH, utility } from '../lib/maut';
+import { bearingDeg, destination } from '../lib/geo';
 import { GRID_ORIGIN, GRID_STEP, NIGHT_SLOTS, SLOT_MS, STATUS_CODE, encodeUtility, nightOf } from '../lib/grid';
 import { rand } from './rand';
 import { ATTR_SCALES, attributeDetails, buildThermal, cropCell, himawariImageUrl, rawFromU } from './thermal';
@@ -407,7 +408,7 @@ function viirsBbox(url: string): [number, number, number, number] {
   return [w, s, e, n];
 }
 
-interface Extras { images: EvidenceImg[]; details: Record<AttrKey, AttrDetail> }
+interface Extras { images: EvidenceImg[]; details: Record<AttrKey, AttrDetail>; viirs: ViirsDetection[] }
 const extrasCache = new Map<string, Extras>();
 
 /** Citra termal + angka terukur per atribut; dibangun sekali per kelompok dari satu grid suhu. */
@@ -425,7 +426,13 @@ function extrasOf(d: ClusterDef, uN8: number, series: SeriesPoint[]): Extras {
   });
   const peaks = new Map<string, number>();
   for (const p of series) if (p.U != null) peaks.set(p.slot.slice(0, 10), Math.max(peaks.get(p.slot.slice(0, 10)) ?? 0, p.U));
+  // distance_km adalah jarak ke centroid (kontrak); letakkan titik di jarak itu supaya posisi di citra dan angka sepakat.
+  const viirs = d.verification.viirs.map((v) => {
+    const [lon, lat] = destination(centre, bearingDeg(centre, [v.lon, v.lat]), v.distance_km);
+    return { ...v, lon: Math.round(lon * 1000) / 1000, lat: Math.round(lat * 1000) / 1000 };
+  });
   const out: Extras = {
+    viirs,
     images: d.verification.images.map((img) => (img.source === 'himawari_image'
       ? { ...img, url: himawariImageUrl(crop, `${img.layer} · mock`, seed), bbox: crop.bbox, thermal: crop }
       : { ...img, bbox: viirsBbox(img.url) })),
@@ -460,7 +467,7 @@ function toDetail(d: ClusterDef): ClusterDetail {
       dir: DIRS[i], state,
       u0: state === 'anomaly' ? r2(0.5 + rand(i, 3) * 0.4) : state === 'normal' ? r2(rand(i, 5) * 0.4) : null,
     })),
-    verification: { ...d.verification, images: extras.images },
+    verification: { ...d.verification, images: extras.images, viirs: extras.viirs },
     decision: decisions.get(d.id) ?? null,
   };
 }

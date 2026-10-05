@@ -3,8 +3,6 @@ import type { LngLat, ThermalBand, ThermalCrop } from '../types';
 export type Sat = 'himawari' | 'gk2a';
 export const SAT_NAME: Record<Sat, string> = { himawari: 'Himawari-9', gk2a: 'GK2A' };
 
-export const kToC = (k: number) => k - 273.15;
-
 // Skala warna citra termal kanal panas (3,8–3,9 µm), suhu kecerahan K: awan dingin (abu terang) → tanah
 // malam (gelap) → panas (oranye → putih). Dipakai citra mock, legenda, dan penanda di tooltip.
 export const THERMAL_STOPS: [number, string][] = [

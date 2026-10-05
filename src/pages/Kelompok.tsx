@@ -108,7 +108,7 @@ export function Kelompok() {
                 <p className="muted small">{t('ver.at', { when: fmtSlot(v.at, lang) })}</p>
                 <div className="evimgs">
                   {v.images.map((img) => (
-                    <EvidenceImage key={img.source} img={img} centre={c.centroid} clusterPixels={c.pixels} repPixel={c.rep_pixel} viirs={v.viirs} />
+                    <EvidenceImage key={img.source} img={img} centre={c.centroid} clusterPixels={c.pixels} repPixel={c.rep_pixel} viirs={v.viirs} hotFrom={c.attribute_details?.u_H?.scale[0]} />
                   ))}
                 </div>
 

@@ -17,6 +17,8 @@ interface Props {
   clusterPixels: string[]; // id piksel anggota kelompok
   repPixel: string;
   viirs: ViirsDetection[];
+  /** Anomali (K) yang mulai dianggap panas di tooltip; dari skala atribut u_H. */
+  hotFrom?: number;
 }
 
 type Bbox = [number, number, number, number];
@@ -24,9 +26,14 @@ type Bbox = [number, number, number, number];
 type Via = 'mouse' | 'touch' | 'key';
 type Probe = { kind: 'pt'; fx: number; fy: number; via: Via } | { kind: 'det'; i: number; via: Via };
 
+const HIT_MOUSE = 9; // px: titik VIIRS terdekat dalam jarak ini yang dipilih saat kursor lewat
+const HIT_TOUCH = 16; // px: jari lebih kasar
 const KEY_STEP = 0.05; // langkah panah di citra tanpa grid (VIIRS), pecahan lebar citra
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+// Hanya satu tooltip citra terbuka sekali waktu: yang baru menutup yang lama (kursor di satu citra, fokus di citra lain).
+let closeActive: (() => void) | null = null;
 
 /** Posisi koordinat di citra sebagai pecahan lebar/tinggi (sumbu lon/lat linear). */
 const toFrac = (bbox: Bbox, lon: number, lat: number) => ({ fx: (lon - bbox[0]) / (bbox[2] - bbox[0]), fy: (bbox[3] - lat) / (bbox[3] - bbox[1]) });
@@ -36,7 +43,7 @@ const toFrac = (bbox: Bbox, lon: number, lat: number) => ({ fx: (lon - bbox[0]) 
  * Himawari punya tooltip suhu per piksel (kedua satelit); citra VIIRS punya tooltip koordinat dan titik
  * deteksi FIRMS. Kursor, ketukan, dan tombol panah semuanya bisa dipakai.
  */
-export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs }: Props) {
+export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs, hotFrom }: Props) {
   const { t, lang } = useI18n();
   const tipId = useId();
   const frame = useRef<HTMLDivElement>(null);
@@ -85,22 +92,32 @@ export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs }: P
     }
     return { kind: 'pt', fx, fy, via };
   });
-  const onMove = (e: PointerEvent) => {
-    if (e.pointerType === 'touch' || (e.target as Element).closest('.viirs-dot')) return;
-    const { fx, fy } = frac(e);
-    point(fx, fy, 'mouse');
+  /** Titik VIIRS yang paling dekat dengan pointer (px), asal dalam jangkauan; titik yang bertumpuk tidak saling menutupi. */
+  const nearestDet = (e: PointerEvent, reach: number) => {
+    const r = frame.current!.getBoundingClientRect();
+    let best: { i: number; dist: number } | null = null;
+    for (const { i, fx, fy } of dets) {
+      const dist = Math.hypot(r.left + fx * r.width - e.clientX, r.top + fy * r.height - e.clientY);
+      if (dist <= reach && (!best || dist < best.dist)) best = { i, dist };
+    }
+    return best?.i ?? null;
   };
-  const onDown = (e: PointerEvent) => {
-    if (e.pointerType !== 'touch' || (e.target as Element).closest('.viirs-dot')) return;
+  const probeAt = (e: PointerEvent, via: Via, reach: number) => {
+    const i = nearestDet(e, reach);
+    if (i != null) { setProbe((p) => (p?.kind === 'det' && p.i === i && p.via === via ? p : { kind: 'det', i, via })); return; }
     const { fx, fy } = frac(e);
-    point(fx, fy, 'touch');
+    point(fx, fy, via);
   };
+  const onMove = (e: PointerEvent) => { if (e.pointerType !== 'touch') probeAt(e, 'mouse', HIT_MOUSE); };
+  const onDown = (e: PointerEvent) => { if (e.pointerType === 'touch') probeAt(e, 'touch', HIT_TOUCH); };
   const onLeave = (e: PointerEvent) => { if (e.pointerType !== 'touch') setProbe((p) => (p?.via === 'mouse' ? null : p)); };
+  // Gestur jari yang berubah jadi gulir halaman dibatalkan browser: jangan tinggalkan tooltip menggantung.
+  const onCancel = () => setProbe((p) => (p?.via === 'touch' ? null : p));
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') { if (probe) { e.stopPropagation(); setProbe(null); } return; }
     const a = ARROWS[e.key];
-    if (!a || e.target !== e.currentTarget) return;
+    if (!a || e.target !== e.currentTarget || e.altKey || e.ctrlKey || e.metaKey) return; // jangan rebut pintasan browser
     e.preventDefault();
     if (probe?.kind !== 'pt') { point(home.fx, home.fy, 'key'); return; } // tekan pertama: mulai dari piksel perwakilan
     if (thermal) {
@@ -121,6 +138,26 @@ export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs }: P
     document.addEventListener('pointerdown', down);
     return () => document.removeEventListener('pointerdown', down);
   }, [touching]);
+
+  // Selama tooltip terbuka: Escape menutupnya dari mana pun (WCAG 1.4.13), tooltip lain menutup yang ini, dan
+  // menutup bila citra sudah tergulir keluar layar (tooltip tidak boleh menggantung tanpa penunjuknya).
+  const open = probe != null;
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setProbe(null);
+    if (closeActive && closeActive !== close) closeActive();
+    closeActive = close;
+    const key = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', key);
+    const el = frame.current;
+    const io = el ? new IntersectionObserver(([en]) => { if (!en.isIntersecting) close(); }) : null;
+    if (el) io?.observe(el);
+    return () => {
+      document.removeEventListener('keydown', key);
+      io?.disconnect();
+      if (closeActive === close) closeActive = null;
+    };
+  }, [open]);
 
   // ---------- apa yang ditunjuk ----------
   const cell = thermal && probe?.kind === 'pt' ? cellOf(thermal, probe.fx, probe.fy) : null;
@@ -169,6 +206,7 @@ export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs }: P
         aria-label={interactive ? `${label}. ${t(thermal ? 'probe.thermal_aria' : 'probe.viirs_aria', { n: thermal?.cols ?? 0 })}` : undefined}
         aria-describedby={interactive && probe?.via === 'key' && probe.kind === 'pt' ? tipId : undefined}
         onPointerMove={interactive ? onMove : undefined} onPointerDown={interactive ? onDown : undefined} onPointerLeave={interactive ? onLeave : undefined}
+        onPointerCancel={interactive ? onCancel : undefined}
         onKeyDown={interactive ? onKey : undefined}
         onFocus={interactive ? (e) => { if (e.target === e.currentTarget && e.currentTarget.matches(':focus-visible')) point(home.fx, home.fy, 'key'); } : undefined}
         onBlur={interactive ? (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setProbe((p) => (p?.via === 'key' ? null : p)); } : undefined}
@@ -209,9 +247,6 @@ export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs }: P
                 style={{ left: `${fx * 100}%`, top: `${fy * 100}%` }}
                 aria-label={`${t('probe.viirs_pt', { sat: satLabel(d.src) })}, ${fmtSlot(d.time_utc, lang)}, ${t('probe.from_marker', { km: fmtNum(d.distance_km, 1, lang) })}`}
                 aria-describedby={probe?.kind === 'det' && probe.i === i ? tipId : undefined}
-                onPointerEnter={(e) => { if (e.pointerType !== 'touch') setProbe({ kind: 'det', i, via: 'mouse' }); }}
-                onPointerLeave={(e) => { if (e.pointerType !== 'touch') setProbe((p) => (p?.kind === 'det' && p.via === 'mouse' ? null : p)); }}
-                onPointerDown={(e) => { if (e.pointerType === 'touch') { e.stopPropagation(); setProbe({ kind: 'det', i, via: 'touch' }); } }}
                 onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) setProbe({ kind: 'det', i, via: 'key' }); }}
                 onBlur={() => setProbe((p) => (p?.kind === 'det' && p.via === 'key' ? null : p))}
               />
@@ -252,7 +287,7 @@ export function EvidenceImage({ img, centre, clusterPixels, repPixel, viirs }: P
         ) : cellInfo ? (
           <ThermalTip
             readings={cellInfo.readings} pixelId={cellInfo.id} lon={cellInfo.lon} lat={cellInfo.lat}
-            km={distKm(centre, [cellInfo.lon, cellInfo.lat])} member={members.has(cellInfo.id)} rep={cellInfo.id === repPixel}
+            km={distKm(centre, [cellInfo.lon, cellInfo.lat])} member={members.has(cellInfo.id)} rep={cellInfo.id === repPixel} hotFrom={hotFrom}
           />
         ) : here ? (
           <CoordTip lon={here[0]} lat={here[1]} km={distKm(centre, here)} />
