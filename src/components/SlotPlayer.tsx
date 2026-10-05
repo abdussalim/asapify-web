@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import type { Meta, NightCompact, SatState } from '../types';
 import { useI18n } from '../i18n';
 import { fmtNight, fmtTime } from '../lib/format';
@@ -69,17 +70,19 @@ export function SlotPlayer({ meta, nightKey, night, isCurrent, slot, last, playi
             <IconCalendar size={14} /><span>{nightLabel}</span>
           </button>
           <button className="icon-btn sm" onClick={() => goto(next)} disabled={next > meta.nights.last} aria-label={t('player.night_next')}>›</button>
-          {calOpen && (
-            <NightCalendar
-              value={nightKey} first={meta.nights.first} last={meta.nights.last} onClose={closeCal}
-              onPick={(d) => { setCalOpen(false); goto(d); }}
-            />
-          )}
+          <AnimatePresence>
+            {calOpen && (
+              <NightCalendar
+                key="cal" value={nightKey} first={meta.nights.first} last={meta.nights.last} onClose={closeCal}
+                onPick={(d) => { setCalOpen(false); goto(d); }}
+              />
+            )}
+          </AnimatePresence>
         </span>
         <button className="link-btn" onClick={() => (isCurrent ? onSlot(last) : onNight(null))} disabled={atLatest}>{t('player.to_latest')}</button>
       </div>
 
-      <div className="ribbon" style={{ ['--now' as string]: slot }}>
+      <div className={`ribbon${playing ? ' playing' : ''}`} style={{ ['--now' as string]: slot }}>
         <div className="ribbon-row awas-row">
           <b aria-hidden="true">▲</b>
           <span className="ribbon-cells" aria-hidden="true">

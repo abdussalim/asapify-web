@@ -1,6 +1,7 @@
 import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { I18nProvider, useI18n } from './i18n';
+import { MotionProvider, m, spring, springSoft } from './motion';
 import { signOut, useUser } from './auth';
 import { useTheme } from './lib/theme';
 import { API_MODE } from './api';
@@ -24,6 +25,20 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return children;
 }
 
+/** Tautan navigasi; latar aktifnya meluncur dari satu tautan ke tautan berikutnya (layoutId bersama). */
+function NavItem({ to, end, children }: { to: string; end?: boolean; children: ReactNode }) {
+  return (
+    <NavLink to={to} end={end}>
+      {({ isActive }) => (
+        <>
+          {isActive && <m.i className="pill-bg nav-bg" layoutId="nav-pill" transition={spring} />}
+          <span className="nl-label">{children}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
 function TopBar({ theme }: { theme: ReturnType<typeof useTheme> }) {
   const { t, lang, setLang } = useI18n();
   const user = useUser();
@@ -38,16 +53,20 @@ function TopBar({ theme }: { theme: ReturnType<typeof useTheme> }) {
           <span className="mock-badge" title={t('mock.title', { sc: currentScenario() })}>{t('mock.badge')}</span>
         )}
         <nav className="navlinks" aria-label={t('nav.label')}>
-          {user && <NavLink to="/" end>{t('nav.map')}</NavLink>}
-          <NavLink to="/tentang">{t('nav.about')}</NavLink>
-          <NavLink to="/kontrak-api">
+          {user && <NavItem to="/" end>{t('nav.map')}</NavItem>}
+          <NavItem to="/tentang">{t('nav.about')}</NavItem>
+          <NavItem to="/kontrak-api">
             <span className="nl-full">{t('nav.api')}</span><span className="nl-short">{t('nav.api_short')}</span>
-          </NavLink>
+          </NavItem>
         </nav>
         <div className="tools">
           <div className="seg" role="group" aria-label={t('lang.switch')}>
-            <button aria-pressed={lang === 'id'} onClick={() => setLang('id')}>ID</button>
-            <button aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+            <button aria-pressed={lang === 'id'} onClick={() => setLang('id')}>
+              {lang === 'id' && <m.i className="pill-bg seg-bg" layoutId="seg-pill" transition={spring} />}<span>ID</span>
+            </button>
+            <button aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
+              {lang === 'en' && <m.i className="pill-bg seg-bg" layoutId="seg-pill" transition={spring} />}<span>EN</span>
+            </button>
           </div>
           <button className="icon-btn" onClick={theme.cycle} title={t(`theme.${theme.pref}`)} aria-label={t(`theme.${theme.pref}`)}>
             {theme.pref === 'auto' ? '◐' : theme.pref === 'light' ? '☀' : '☾'}
@@ -70,7 +89,13 @@ function Shell({ theme }: { theme: ReturnType<typeof useTheme> }) {
       <TopBar theme={theme} />
       <main className={loc.pathname === '/' ? 'main-map' : 'main'}>
         <Suspense fallback={<PageFallback />}>
-          <Outlet />
+          {/* Dipasang ulang tiap rute (dan setelah chunk malas selesai), jadi halaman baru selalu masuk dengan gerak. */}
+          <m.div
+            key={loc.pathname} className="route"
+            initial={{ opacity: 0, y: loc.pathname === '/' ? 0 : 12 }} animate={{ opacity: 1, y: 0 }} transition={springSoft}
+          >
+            <Outlet />
+          </m.div>
         </Suspense>
       </main>
     </>
@@ -96,9 +121,11 @@ function Root() {
 export function App() {
   return (
     <I18nProvider>
-      <BrowserRouter>
-        <Root />
-      </BrowserRouter>
+      <MotionProvider>
+        <BrowserRouter>
+          <Root />
+        </BrowserRouter>
+      </MotionProvider>
     </I18nProvider>
   );
 }

@@ -2,6 +2,7 @@ import { useId } from 'react';
 import type { SeriesPoint } from '../types';
 import { useI18n } from '../i18n';
 import { fmtDate, fmtNum } from '../lib/format';
+import { m, spring } from '../motion';
 
 interface Props {
   series: SeriesPoint[];
@@ -77,12 +78,22 @@ export function UtilityChart({ series, thresholds, triggerSlot }: Props) {
         {segments.map((s, i) =>
           s.length === 1
             ? <circle key={i} cx={s[0].split(',')[0]} cy={s[0].split(',')[1]} r="1.6" fill="var(--ink)" />
-            : <polyline key={i} points={s.join(' ')} fill="none" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round" />,
+            : (
+              // garis utilitas tergambar dari kiri ke kanan saat grafik masuk layar
+              <m.polyline
+                key={i} points={s.join(' ')} fill="none" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round"
+                initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }}
+                transition={{ duration: 0.9, ease: [0.32, 0.72, 0, 1], delay: 0.1 + i * 0.25 }}
+              />
+            ),
         )}
         {tp && trig?.U != null && (
           <g>
             <line x1={tp.x} x2={tp.x} y1={PT} y2={PT + ih} stroke="var(--ember)" strokeWidth="1" />
-            <circle cx={tp.x} cy={y(trig.U)} r="4.5" fill="var(--ember)" stroke="var(--surface)" strokeWidth="1.5" />
+            <m.circle
+              cx={tp.x} cy={y(trig.U)} fill="var(--ember)" stroke="var(--surface)" strokeWidth="1.5"
+              initial={{ r: 0 }} whileInView={{ r: 4.5 }} viewport={{ once: true }} transition={{ ...spring, delay: 0.9 }}
+            />
             <text x={tp.x - 6} y={PT + ih - 6} textAnchor="end" className="ax" fill="var(--ember)">{t('chart.trigger')}</text>
           </g>
         )}

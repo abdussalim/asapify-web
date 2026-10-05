@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
+import { AnimatePresence, LayoutGroup } from 'motion/react';
 import type { ClusterSummary, ProvinceBoundary, ProvinceCode, Status, StatusCode } from '../types';
 import { api } from '../api';
 import { useI18n } from '../i18n';
@@ -7,6 +8,7 @@ import { useLoad } from '../lib/useLoad';
 import { errorText } from '../lib/errors';
 import { fmtNight, fmtNum, fmtSlot } from '../lib/format';
 import { load, save } from '../lib/storage';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import { detectLite, loadLitePref, saveLitePref } from '../lib/device';
 import { ISLANDS, PROVINCES, REGION, provincesOf } from '../lib/provinces';
 import {
@@ -21,6 +23,8 @@ import { SlotPlayer } from '../components/SlotPlayer';
 import { PixelInspector } from '../components/PixelInspector';
 import { LayerControl } from '../components/LayerControl';
 import { Select } from '../components/Select';
+import { Sheet } from '../components/Sheet';
+import { LiteMotion, m, spring } from '../motion';
 import { StatusIcon } from '../components/icons';
 
 const ALL: Status[] = ['AWAS', 'WATCH', 'NO_OBSERVATION', 'SAFE'];
@@ -64,6 +68,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
   const [slot, setSlot] = useState<number | null>(null); // null = slot terakhir malam yang dibuka
   const [playing, setPlaying] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(true);
+  const isSheet = useMediaQuery('(max-width: 1023px)'); // panel jadi bottom sheet
   const [query, setQuery] = useState('');
   const [searchMsg, setSearchMsg] = useState<string | null>(null);
 
@@ -253,142 +258,152 @@ export function PetaOperator({ dark }: { dark: boolean }) {
   const loadError = base.error ?? clustersQ.error;
 
   return (
-    <div className={`map-page ${sheetOpen ? 'sheet-open' : ''} ${lite ? 'is-lite' : ''}`}>
-      <aside className="panel" aria-label={t('map.panel')}>
-        <button className="grab" onClick={() => setSheetOpen((o) => !o)} aria-expanded={sheetOpen} aria-label={t('map.panel')}>
-          <span />
-        </button>
+    <LiteMotion lite={lite}>
+      <div className={`map-page ${sheetOpen ? 'sheet-open' : ''} ${lite ? 'is-lite' : ''}`}>
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen} enabled={isSheet} label={t('map.panel')}>
+          {meta ? <DataBanner meta={meta} cloudy={cloudy && !noData} archive={isCurrent ? null : viewNight} noData={noData} /> : <div className="skel" style={{ height: 30 }} />}
 
-        {meta ? <DataBanner meta={meta} cloudy={cloudy && !noData} archive={isCurrent ? null : viewNight} noData={noData} /> : <div className="skel" style={{ height: 30 }} />}
+          <form className="search" onSubmit={onSearch} role="search">
+            <label htmlFor="map-q" className="lbl">{t('search.label')}</label>
+            <div className="search-row">
+              <input
+                id="map-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('search.placeholder')}
+                autoComplete="off" spellCheck={false} enterKeyHint="search"
+              />
+              <button className="btn" type="submit">{t('search.go')}</button>
+            </div>
+            {searchMsg && <p className="search-msg" role="status">{searchMsg}</p>}
+          </form>
 
-        <form className="search" onSubmit={onSearch} role="search">
-          <label htmlFor="map-q" className="lbl">{t('search.label')}</label>
-          <div className="search-row">
-            <input
-              id="map-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('search.placeholder')}
-              autoComplete="off" spellCheck={false} enterKeyHint="search"
-            />
-            <button className="btn" type="submit">{t('search.go')}</button>
+          <div className="filters">
+            <div className="chips" role="group" aria-label={t('map.filter_status')}>
+              {ALL.map((s) => (
+                <button key={s} className={`chip st-${s.toLowerCase()}`} aria-pressed={statuses.includes(s)} onClick={() => toggle(s)}>
+                  <StatusIcon status={s} size={12} />{t(STATUS_KEY[s])}
+                </button>
+              ))}
+            </div>
+            <div className="select">
+              <span className="lbl" id="prov-lbl">{t('map.filter_province')}</span>
+              <Select
+                labelledBy="prov-lbl" value={province} onChange={(v) => setProvince(v as ProvinceCode | '')}
+                items={[
+                  { value: '', label: t('map.all_provinces') },
+                  ...ISLANDS.map((isl) => ({
+                    label: t(`island.${isl}`),
+                    options: provincesOf(isl).map((p) => ({ value: p, label: t(`prov.${p}`) })),
+                  })),
+                ]}
+              />
+            </div>
           </div>
-          {searchMsg && <p className="search-msg" role="status">{searchMsg}</p>}
-        </form>
 
-        <div className="filters">
-          <div className="chips" role="group" aria-label={t('map.filter_status')}>
-            {ALL.map((s) => (
-              <button key={s} className={`chip st-${s.toLowerCase()}`} aria-pressed={statuses.includes(s)} onClick={() => toggle(s)}>
-                <StatusIcon status={s} size={12} />{t(STATUS_KEY[s])}
-              </button>
-            ))}
-          </div>
-          <div className="select">
-            <span className="lbl" id="prov-lbl">{t('map.filter_province')}</span>
+          <div className="list-head">
+            <b>{t('map.clusters_title', { n: visible.length })}</b>
             <Select
-              labelledBy="prov-lbl" value={province} onChange={(v) => setProvince(v as ProvinceCode | '')}
+              size="sm" align="end" label={t('map.sort_label')} value={sort} onChange={(v) => setSort(v as Sort)}
               items={[
-                { value: '', label: t('map.all_provinces') },
-                ...ISLANDS.map((isl) => ({
-                  label: t(`island.${isl}`),
-                  options: provincesOf(isl).map((p) => ({ value: p, label: t(`prov.${p}`) })),
-                })),
+                { value: 'utility', label: t('map.sort_utility') },
+                { value: 'newest', label: t('map.sort_newest') },
+                { value: 'oldest', label: t('map.sort_oldest') },
               ]}
             />
           </div>
-        </div>
 
-        <div className="list-head">
-          <b>{t('map.clusters_title', { n: visible.length })}</b>
-          <Select
-            size="sm" align="end" label={t('map.sort_label')} value={sort} onChange={(v) => setSort(v as Sort)}
-            items={[
-              { value: 'utility', label: t('map.sort_utility') },
-              { value: 'newest', label: t('map.sort_newest') },
-              { value: 'oldest', label: t('map.sort_oldest') },
-            ]}
-          />
-        </div>
+          {loadError && (
+            <div className="error" role="alert">
+              {t('load_error', { msg: errorText(loadError, t) })}{' '}
+              <button className="link-btn" onClick={() => { base.reload(); clustersQ.reload(); }}>{t('retry')}</button>
+            </div>
+          )}
 
-        {loadError && (
-          <div className="error" role="alert">
-            {t('load_error', { msg: errorText(loadError, t) })}{' '}
-            <button className="link-btn" onClick={() => { base.reload(); clustersQ.reload(); }}>{t('retry')}</button>
-          </div>
-        )}
+          {!clusters && !loadError ? (
+            <div className="queue">{[0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: 92 }} />)}</div>
+          ) : visible.length === 0 && !loadError ? (
+            <p className="empty">{isCurrent ? t('map.empty') : t('map.empty_night', { date: fmtNight(viewNight!, lang) })}</p>
+          ) : (
+            <ul className="queue">
+              {/* Urutan/filter berubah → kartu meluncur ke tempat barunya; kartu baru muncul bertahap, yang hilang menyusut. */}
+              <AnimatePresence mode="popLayout">
+                {visible.map((c, i) => (
+                  <m.li
+                    key={c.id} layout="position" className={`queue-item ${selected === c.id ? 'on' : ''} ${c.decision ? 'is-decided' : ''}`}
+                    initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0, transition: { ...spring, delay: Math.min(i, 8) * 0.04 } }}
+                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.14 } }} transition={spring}
+                  >
+                    <button className="qi-main" onClick={() => select(c.id, c.centroid)} aria-pressed={selected === c.id}>
+                      <span className="qi-top">
+                        <b className="qi-id">{c.id}</b>
+                        <span className="qi-u" aria-label={`${t('map.utility')} ${fmtNum(c.utility_score, 2, lang)}`}>
+                          <small>U</small>{fmtNum(c.utility_score, 2, lang)}
+                          <i style={{ ['--u' as string]: c.utility_score }} />
+                        </span>
+                      </span>
+                      <span className="qi-row muted">
+                        {t(`prov.${c.province}`)} · {t('map.pixels', { n: c.pixels.length })} · {t('map.nbr', { k: Math.round(c.neighbour_support * 8) })}
+                      </span>
+                      <span className="qi-row muted">{t('map.triggered', { when: fmtSlot(c.trigger_slot, lang) })}</span>
+                      <span className="qi-row"><EvidenceBadge result={c.verification?.result ?? null} /><DecisionState decision={c.decision} /></span>
+                    </button>
+                    <Link className="qi-link" to={`/kelompok/${c.id}`}>{t('map.open_detail')}</Link>
+                  </m.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+          )}
 
-        {!clusters && !loadError ? (
-          <div className="queue">{[0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: 92 }} />)}</div>
-        ) : visible.length === 0 && !loadError ? (
-          <p className="empty">{isCurrent ? t('map.empty') : t('map.empty_night', { date: fmtNight(viewNight!, lang) })}</p>
-        ) : (
-          <ul className="queue">
-            {visible.map((c) => (
-              <li key={c.id} className={`queue-item ${selected === c.id ? 'on' : ''} ${c.decision ? 'is-decided' : ''}`}>
-                <button className="qi-main" onClick={() => select(c.id, c.centroid)} aria-pressed={selected === c.id}>
-                  <span className="qi-top">
-                    <b className="qi-id">{c.id}</b>
-                    <span className="qi-u" aria-label={`${t('map.utility')} ${fmtNum(c.utility_score, 2, lang)}`}>
-                      <small>U</small>{fmtNum(c.utility_score, 2, lang)}
-                      <i style={{ ['--u' as string]: c.utility_score }} />
-                    </span>
-                  </span>
-                  <span className="qi-row muted">
-                    {t(`prov.${c.province}`)} · {t('map.pixels', { n: c.pixels.length })} · {t('map.nbr', { k: Math.round(c.neighbour_support * 8) })}
-                  </span>
-                  <span className="qi-row muted">{t('map.triggered', { when: fmtSlot(c.trigger_slot, lang) })}</span>
-                  <span className="qi-row"><EvidenceBadge result={c.verification?.result ?? null} /><DecisionState decision={c.decision} /></span>
-                </button>
-                <Link className="qi-link" to={`/kelompok/${c.id}`}>{t('map.open_detail')}</Link>
-              </li>
-            ))}
-          </ul>
-        )}
+          <details className="legend">
+            <summary>{t('map.legend')}</summary>
+            <ul>
+              {ALL.map((s) => <li key={s}><StatusBadge status={s} /></li>)}
+              <li><i className="lg-line dash" />{t('map.peat')}</li>
+              <li><i className="lg-line thin" />{t('lc.layer_provinces')}</li>
+              <li><i className="lg-line focus" />{t('map.province_focus')}</li>
+              <li><i className="lg-line thick" />{t('map.cluster')}</li>
+              <li><i className="lg-dot" />{t('map.viirs')}</li>
+            </ul>
+            <p className="muted small">{t('awas.note')}</p>
+          </details>
+        </Sheet>
 
-        <details className="legend">
-          <summary>{t('map.legend')}</summary>
-          <ul>
-            {ALL.map((s) => <li key={s}><StatusBadge status={s} /></li>)}
-            <li><i className="lg-line dash" />{t('map.peat')}</li>
-            <li><i className="lg-line thin" />{t('lc.layer_provinces')}</li>
-            <li><i className="lg-line focus" />{t('map.province_focus')}</li>
-            <li><i className="lg-line thick" />{t('map.cluster')}</li>
-            <li><i className="lg-dot" />{t('map.viirs')}</li>
-          </ul>
-          <p className="muted small">{t('awas.note')}</p>
-        </details>
-      </aside>
-
-      <div className="map-wrap">
-        <div ref={mapEl} className="map" role="region" aria-label={t('map.aria')} />
-        <div className="map-overlay top-left">
-          <LayerControl
-            basemap={basemap} basemaps={basemaps ?? []} layers={layers} lite={lite} liteReason={liteReason}
-            liteAuto={litePref == null} onBasemap={setBasemap}
-            onLayer={(k, on) => setLayers((l) => ({ ...l, [k]: on }))} onLite={setLite}
-          />
-          {index && cell >= 0 && statusStr && (
-            <PixelInspector
-              index={index} cell={cell}
-              status={statusStr[cell] as StatusCode}
-              latestStatus={isCurrent ? ((compact?.status[cell] as StatusCode) ?? null) : null}
-              utility={isCurrent ? utilityAt(utility, cell) : undefined}
-              nSat={isCurrent && atLast ? (compact?.n_sat ?? null) : (nightData?.n_sat[cur] ?? null)}
-              clusterId={clusterOfCell.get(cell) ?? null} history={history} slot={cur} isLatest={atLast}
-              night={isCurrent ? null : viewNight}
-              onClose={() => setCell(-1)}
-            />
+        <div className="map-wrap">
+          <div ref={mapEl} className="map" role="region" aria-label={t('map.aria')} />
+          <LayoutGroup>
+            <div className="map-overlay top-left">
+              <LayerControl
+                basemap={basemap} basemaps={basemaps ?? []} layers={layers} lite={lite} liteReason={liteReason}
+                liteAuto={litePref == null} onBasemap={setBasemap}
+                onLayer={(k, on) => setLayers((l) => ({ ...l, [k]: on }))} onLite={setLite}
+              />
+              <AnimatePresence>
+                {index && cell >= 0 && statusStr && (
+                  <PixelInspector
+                    key="inspector"
+                    index={index} cell={cell}
+                    status={statusStr[cell] as StatusCode}
+                    latestStatus={isCurrent ? ((compact?.status[cell] as StatusCode) ?? null) : null}
+                    utility={isCurrent ? utilityAt(utility, cell) : undefined}
+                    nSat={isCurrent && atLast ? (compact?.n_sat ?? null) : (nightData?.n_sat[cur] ?? null)}
+                    clusterId={clusterOfCell.get(cell) ?? null} history={history} slot={cur} isLatest={atLast}
+                    night={isCurrent ? null : viewNight}
+                    onClose={() => setCell(-1)}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+          </LayoutGroup>
+          {meta && viewNight && (
+            <div className="map-overlay bottom">
+              <SlotPlayer
+                meta={meta} nightKey={viewNight} night={nightData} isCurrent={isCurrent}
+                slot={cur} last={last} playing={playing}
+                onSlot={(i) => { setPlaying(false); setSlot(i === last ? null : i); }} onPlay={onPlay}
+                onNight={goNight}
+              />
+            </div>
           )}
         </div>
-        {meta && viewNight && (
-          <div className="map-overlay bottom">
-            <SlotPlayer
-              meta={meta} nightKey={viewNight} night={nightData} isCurrent={isCurrent}
-              slot={cur} last={last} playing={playing}
-              onSlot={(i) => { setPlaying(false); setSlot(i === last ? null : i); }} onPlay={onPlay}
-              onNight={goNight}
-            />
-          </div>
-        )}
       </div>
-    </div>
+    </LiteMotion>
   );
 }

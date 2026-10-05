@@ -3,6 +3,7 @@ import type { PixelIndex, StatusCode } from '../types';
 import { useI18n } from '../i18n';
 import { fmtCoord, fmtNight, fmtNum } from '../lib/format';
 import { CODE_STATUS, cellCenter, pixelIdOf, provinceOf } from '../lib/grid';
+import { exitFast, m, spring } from '../motion';
 import { StatusBadge } from './StatusBadge';
 import { IconX } from './icons';
 
@@ -27,7 +28,11 @@ export function PixelInspector({ index, cell, status, latestStatus, utility, nSa
   const [lon, lat] = cellCenter(index, cell);
   const historyLabel = night ? t('insp.history_night', { date: fmtNight(night, lang) }) : t('insp.history');
   return (
-    <section className="inspector" aria-label={t('insp.title')}>
+    <m.section
+      className="inspector" aria-label={t('insp.title')} layout="position"
+      initial={{ opacity: 0, x: -18, scale: 0.96 }} animate={{ opacity: 1, x: 0, scale: 1, transition: spring }}
+      exit={{ opacity: 0, x: -12, scale: 0.97, transition: exitFast }} transition={spring}
+    >
       <header>
         <span className="lbl">{t('insp.title')}</span>
         <button className="icon-btn sm" onClick={onClose} aria-label={t('insp.close')}><IconX size={13} /></button>
@@ -57,6 +62,6 @@ export function PixelInspector({ index, cell, status, latestStatus, utility, nSa
         </span>
       </div>
       {clusterId && <Link className="btn primary wide" to={`/kelompok/${clusterId}`}>{t('insp.open_cluster', { id: clusterId })}</Link>}
-    </section>
+    </m.section>
   );
 }

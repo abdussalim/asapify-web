@@ -1,4 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { AnimatePresence } from 'motion/react';
+import { exitFast, m, spring } from '../motion';
 import { IconCheck } from './icons';
 
 export interface SelectOption { value: string; label: string; disabled?: boolean }
@@ -34,6 +36,7 @@ export function Select({ value, items, onChange, label, labelledBy, size = 'md',
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [place, setPlace] = useState<{ up: boolean; maxH: number }>({ up: false, maxH: MAX_H });
+  const [hl, setHl] = useState<{ top: number; h: number } | null>(null); // sorotan pilihan aktif yang meluncur
   const root = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -48,6 +51,7 @@ export function Select({ value, items, onChange, label, labelledBy, size = 'md',
   const show = () => {
     const cur = indexOf.get(value) ?? -1;
     setActive(cur >= 0 && !flat[cur].disabled ? cur : nextEnabled(0, 1));
+    setHl(null); // sorotan dipasang ulang di posisi pilihan aktif tanpa meluncur dari sisa pembukaan lalu
     setOpen(true);
   };
   const hide = (refocus = true) => {
@@ -82,14 +86,16 @@ export function Select({ value, items, onChange, label, labelledBy, size = 'md',
     list.current.focus({ preventScroll: true });
   }, [open]);
 
-  // Gulir di dalam daftar saja; scrollIntoView ikut menggulir panel induk.
-  useEffect(() => {
+  // Gulir di dalam daftar saja (scrollIntoView ikut menggulir panel induk) dan ukur posisi sorotan.
+  // Daftar berposisi absolut, jadi offsetTop opsi = posisinya di isi daftar yang digulir.
+  useLayoutEffect(() => {
     const ul = list.current;
     const el = open && active >= 0 ? ul?.querySelector<HTMLElement>(`[data-i="${active}"]`) : null;
     if (!ul || !el) return;
     const top = el.offsetTop, bottom = top + el.offsetHeight;
     if (top < ul.scrollTop) ul.scrollTop = top - 4;
     else if (bottom > ul.scrollTop + ul.clientHeight) ul.scrollTop = bottom - ul.clientHeight + 4;
+    setHl({ top, h: el.offsetHeight });
   }, [open, active]);
 
   useEffect(() => {
@@ -153,24 +159,30 @@ export function Select({ value, items, onChange, label, labelledBy, size = 'md',
         onClick={() => (open ? hide() : show())} onKeyDown={onButtonKey}
       >
         <span className="sel-value">{selected?.label ?? ''}</span>
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <m.svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" initial={false} animate={{ rotate: open ? 180 : 0 }} transition={spring}>
           <path d="M3 4.5L6 7.5L9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        </m.svg>
       </button>
-      {open && (
-        <ul
-          ref={list} id={listId} role="listbox" tabIndex={-1} className={`sel-list${place.up ? ' up' : ''}`} style={{ maxHeight: place.maxH }}
-          aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}
-          aria-activedescendant={active >= 0 ? `${id}-o${active}` : undefined} onKeyDown={onListKey}
-        >
-          {items.map((x) => (isGroup(x) ? (
-            <li key={`g-${x.label}`} role="group" aria-label={x.label} className="sel-grp">
-              <span className="sel-grp-label" aria-hidden="true">{x.label}</span>
-              <ul role="none">{x.options.map(option)}</ul>
-            </li>
-          ) : option(x)))}
-        </ul>
-      )}
+      <AnimatePresence>
+        {open && (
+          <m.ul
+            key="list" ref={list} id={listId} role="listbox" tabIndex={-1} className={`sel-list${place.up ? ' up' : ''}`}
+            style={{ maxHeight: place.maxH, transformOrigin: `${align === 'end' ? '100%' : '0%'} ${place.up ? '100%' : '0%'}` }}
+            initial={{ opacity: 0, scale: 0.94, y: place.up ? 6 : -6 }} animate={{ opacity: 1, scale: 1, y: 0, transition: spring }}
+            exit={{ opacity: 0, scale: 0.97, y: place.up ? 3 : -3, transition: exitFast }}
+            aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}
+            aria-activedescendant={active >= 0 ? `${id}-o${active}` : undefined} onKeyDown={onListKey}
+          >
+            {hl && <m.div className="sel-hl" aria-hidden="true" initial={false} animate={{ y: hl.top, height: hl.h }} transition={spring} />}
+            {items.map((x) => (isGroup(x) ? (
+              <li key={`g-${x.label}`} role="group" aria-label={x.label} className="sel-grp">
+                <span className="sel-grp-label" aria-hidden="true">{x.label}</span>
+                <ul role="none">{x.options.map(option)}</ul>
+              </li>
+            ) : option(x)))}
+          </m.ul>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

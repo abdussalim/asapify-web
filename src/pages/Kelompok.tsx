@@ -19,6 +19,7 @@ import { ViirsList } from '../components/ViirsList';
 import { ToolTrace } from '../components/ToolTrace';
 import { DecisionPanel, DecisionState } from '../components/DecisionPanel';
 import { IconAlert, IconArrowLeft } from '../components/icons';
+import { m, reveal } from '../motion';
 
 export function Kelompok() {
   const { id = '' } = useParams();
@@ -56,7 +57,7 @@ export function Kelompok() {
 
   return (
     <div className="wrap detail">
-      <header className="detail-head">
+      <m.header className="detail-head" {...reveal(0)}>
         <Link className="back" to="/"><IconArrowLeft />{t('cluster.back')}</Link>
         <div className="title-row">
           <h1 className="mono">{c.id}</h1>
@@ -75,26 +76,26 @@ export function Kelompok() {
           <div><dt>{t('cluster.f_dec')}</dt><dd><DecisionState decision={c.decision} /></dd></div>
         </dl>
         <p className="callout"><IconAlert size={14} /> {t('awas.note')}</p>
-      </header>
+      </m.header>
 
       <div className="detail-grid">
         <div className="col">
-          <section className="card" aria-labelledby="chart-h">
+          <m.section className="card" aria-labelledby="chart-h" {...reveal(1)}>
             <h2 id="chart-h">{t('chart.title')}</h2>
             <UtilityChart series={c.series} thresholds={{ watch: T_WATCH, awas: T_AWAS }} triggerSlot={c.trigger_slot} />
-          </section>
-          <section className="card" aria-labelledby="attr-h">
+          </m.section>
+          <m.section className="card" aria-labelledby="attr-h" {...reveal(2)}>
             <h2 id="attr-h">{t('attr.title')}</h2>
             <AttributeBars attributes={c.attributes} neighbourSupport={c.neighbour_support} weights={WEIGHTS} />
-          </section>
-          <section className="card" aria-labelledby="nbr-h">
+          </m.section>
+          <m.section className="card" aria-labelledby="nbr-h" {...reveal(3)}>
             <h2 id="nbr-h">{t('nbr.title')}</h2>
             <NeighbourGrid neighbours={c.neighbours} />
-          </section>
+          </m.section>
         </div>
 
         <div className="col">
-          <section className="card" aria-labelledby="ver-h">
+          <m.section className="card" aria-labelledby="ver-h" {...reveal(2)}>
             <div className="card-head">
               <h2 id="ver-h">{t('ver.title')}</h2>
               <EvidenceBadge result={v?.result ?? null} />
@@ -128,7 +129,7 @@ export function Kelompok() {
                 <ToolTrace calls={v.tool_trace} />
               </>
             )}
-          </section>
+          </m.section>
 
           <DecisionPanel key={`${c.id}-${c.decision?.at ?? 'open'}`} cluster={c} caption={caption} onDecided={reload} />
         </div>

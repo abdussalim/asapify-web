@@ -1,7 +1,14 @@
 import type { Neighbour, NeighbourDir } from '../types';
 import { useI18n } from '../i18n';
 import { fmtNum } from '../lib/format';
+import { m, spring } from '../motion';
 import { IconCloud } from './icons';
+
+// Sembilan sel muncul berurutan (urutan baca) saat grid masuk layar.
+const pop = (i: number) => ({
+  initial: { opacity: 0, scale: 0.6 }, whileInView: { opacity: 1, scale: 1 }, viewport: { once: true },
+  transition: { ...spring, delay: 0.05 + i * 0.045 },
+});
 
 const LAYOUT: (NeighbourDir | 'c')[] = ['nw', 'n', 'ne', 'w', 'c', 'e', 'sw', 's', 'se'];
 
@@ -15,14 +22,14 @@ export function NeighbourGrid({ neighbours }: { neighbours: Neighbour[] }) {
   return (
     <div className="nbfig">
       <div className="nbg" role="group" aria-label={t('nbr.title')}>
-        {LAYOUT.map((d) => {
-          if (d === 'c') return <span key="c" className="p" aria-label={t('nbr.center')}>P</span>;
+        {LAYOUT.map((d, i) => {
+          if (d === 'c') return <m.span key="c" className="p" aria-label={t('nbr.center')} {...pop(i)}>P</m.span>;
           const n = byDir.get(d);
           if (!n) return <span key={d} className="x" />;
           return (
-            <span key={d} className={n.state} aria-label={`${d.toUpperCase()}: ${label(n)}`} title={label(n)}>
+            <m.span key={d} className={n.state} aria-label={`${d.toUpperCase()}: ${label(n)}`} title={label(n)} {...pop(i)}>
               {n.state === 'cloud' ? <IconCloud size={13} /> : n.state === 'non_peat' ? '—' : n.u0 != null ? fmtNum(n.u0, 1, lang) : ''}
-            </span>
+            </m.span>
           );
         })}
       </div>

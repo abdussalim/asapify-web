@@ -68,12 +68,12 @@ mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk al
 
 ## Peta ringan
 
-- MapLibre (±290 KB gzip) hanya dimuat di rute peta; halaman lain ±100 KB gzip.
+- MapLibre (±290 KB gzip) hanya dimuat di rute peta; halaman lain ±118 KB gzip (±17 KB di antaranya inti gerak, lihat *Gerak*).
 - Geometri piksel dibangun sekali; status per slot, filter status, dan pemutar memakai `feature-state`
   (hanya sel yang berubah yang ditulis ulang, tanpa re-tiling).
 - Mode ringan otomatis bila penghemat data menyala, RAM ≤ 2 GB, ≤ 2 inti (atau ≤ 4 inti dengan RAM ≤ 4 GB),
-  atau reduced-motion: basemap polos, tanpa pendar/garis grid/animasi kamera, pixel ratio 1. Bisa diubah di
-  kontrol Layer; pilihan disimpan per perangkat.
+  atau reduced-motion: basemap polos, tanpa pendar/garis grid/animasi kamera, pixel ratio 1, dan gerak
+  transform antarmuka dimatikan (hanya memudar). Bisa diubah di kontrol Layer; pilihan disimpan per perangkat.
 - Batas provinsi mock: geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors), 15 provinsi disederhanakan ±90 KB
   di `public/mock/`. Mode live memakai `VITE_PROVINCES_LAYER_URL`. Provinsi yang dipilih di filter digambar
   dengan garis batas tebal, labelnya, dan bayangan di luar provinsi.
@@ -81,6 +81,28 @@ mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk al
 
 Sumber datanya `src/contract/spec.ts` (tipe TypeScript tetap di `src/types.ts`). Field bertanda
 **usulan FE** belum ada di `backend.html` dan perlu disepakati tim BE.
+
+## Gerak
+
+Animasi memakai [`motion`](https://motion.dev) (pengganti framer-motion). Semua komponen memakai `m` dari `src/motion`
+(bukan `motion`), dibungkus `LazyMotion` di `MotionProvider`: inti ±17 KB gzip ikut bundel awal, fitur gerak penuh
+(animasi, gestur, layout, drag; ±20 KB gzip) dimuat belakangan sebagai chunk `features`. Bila chunk itu gagal
+dimuat, `<html>` diberi kelas `no-motion` dan halaman tampil tanpa gerak.
+
+| Di mana | Geraknya |
+|---|---|
+| Pindah halaman, kartu, bar, grafik, grid tetangga | masuk dengan pegas saat terlihat (`reveal`, `whileInView`); garis grafik tergambar, bar tumbuh |
+| Tautan navigasi, tombol ID/EN | latar aktif meluncur antar item (`layoutId`) |
+| Dropdown (`Select`) | daftar membuka dari sisi tombol, sorotan opsi meluncur mengikuti panah/pointer |
+| Kalender malam | muncul dari pojok pemicu; pindah bulan menggeser kisi sesuai arah, tinggi tetap 6 baris |
+| Panel Lapisan, inspektur piksel | muncul/hilang; inspektur meluncur ke posisi baru saat panel Lapisan dibuka (`LayoutGroup`) |
+| Daftar kelompok | ganti urutan/filter → kartu meluncur ke tempatnya; kartu baru muncul bertahap, yang hilang menyusut |
+| Bottom sheet (layar < 1024 px) | diseret lewat gagang (`Sheet`): lepas pelan → ke posisi terdekat, lemparan → menurut arah; isi tetap bisa digulir |
+| Panel keputusan | blok alasan/konfirmasi/galat memudar masuk-keluar, elemen di bawahnya meluncur |
+| Tombol, chip, sakelar, `<details>` | CSS murni: tekan memantul (`--ease-spring`), kenop sakelar, `<details>` membuka dengan tinggi mengalir |
+
+Preferensi sistem *reduced motion* dan mode ringan memakai `MotionConfig reducedMotion`: gerak transform/layout
+langsung ke nilai akhir, hanya opacity yang tetap memudar. Preset pegas ada di `src/motion/presets.ts`.
 
 ## Catatan teknis
 

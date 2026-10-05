@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { ApiError, type ClusterDetail, type Decision } from '../types';
 import { api } from '../api';
 import { useI18n } from '../i18n';
 import { fmtNum, fmtSlot } from '../lib/format';
 import { CAPTION_MAX } from '../lib/caption';
 import { errorText } from '../lib/errors';
+import { exitFast, m, reveal, spring } from '../motion';
 import { IconCheck, IconClock, IconSend, IconX } from './icons';
 
 /** Label keputusan: teks + ikon, tanpa warna level. */
@@ -24,6 +26,10 @@ interface Props {
 
 type Mode = 'idle' | 'confirm' | 'reject';
 
+const slide = {
+  initial: { opacity: 0, y: -8 }, animate: { opacity: 1, y: 0, transition: spring }, exit: { opacity: 0, transition: exitFast },
+};
+
 /** Dua tombol saja: Terbitkan (caption bisa disunting) atau Tolak (alasan wajib). */
 export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: Props) {
   const { t, lang } = useI18n();
@@ -39,7 +45,7 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
 
   if (d) {
     return (
-      <section className="card decision" aria-labelledby="dec-h">
+      <m.section className="card decision" aria-labelledby="dec-h" {...reveal(0)}>
         <h2 id="dec-h">{t('dec.title')}</h2>
         <p className="decided">
           {d.action === 'publish' ? <IconCheck /> : <IconX />}
@@ -47,7 +53,7 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
         </p>
         {d.alert_id && <p className="muted">{t('dec.alert', { id: d.alert_id })}</p>}
         {d.reason && <blockquote>{d.reason}</blockquote>}
-      </section>
+      </m.section>
     );
   }
 
@@ -74,7 +80,7 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
   }
 
   return (
-    <section className="card decision" aria-labelledby="dec-h">
+    <m.section className="card decision" aria-labelledby="dec-h" {...reveal(1)}>
       <h2 id="dec-h">{t('dec.title')}</h2>
       <div className="dec-summary">
         <span className="lbl">{t('dec.summary')}</span>
@@ -94,18 +100,22 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
         onChange={(e) => setCaption(e.target.value)} aria-invalid={tooLong}
       />
 
-      {mode === 'reject' && (
-        <>
-          <label className="field-label" htmlFor="reason"><span>{t('dec.reason')}</span></label>
-          <textarea id="reason" value={reason} rows={3} required autoFocus disabled={busy} onChange={(e) => setReason(e.target.value)} />
-        </>
-      )}
+      {/* Blok yang muncul/hilang memudar masuk-keluar; elemen di bawahnya (layout="position") meluncur ke tempat barunya. */}
+      <AnimatePresence initial={false}>
+        {mode === 'reject' && (
+          <m.div key="reason" className="expand" {...slide}>
+            <label className="field-label" htmlFor="reason"><span>{t('dec.reason')}</span></label>
+            <textarea id="reason" value={reason} rows={3} required autoFocus disabled={busy} onChange={(e) => setReason(e.target.value)} />
+          </m.div>
+        )}
+        {mode === 'confirm' && <m.p key="confirm" className="confirm" role="alert" {...slide}>{t('dec.confirm_publish', { prov })}</m.p>}
+        {error && <m.p key="error" className="error" role="alert" {...slide}>{error}</m.p>}
+      </AnimatePresence>
 
-      {mode === 'confirm' && <p className="confirm" role="alert">{t('dec.confirm_publish', { prov })}</p>}
-
-      {error && <p className="error" role="alert">{error}</p>}
-
-      <div className="btns">
+      <m.div
+        key={mode} className="btns" layout="position" transition={spring}
+        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      >
         {mode === 'idle' && (
           <>
             <button className="btn primary" disabled={busy || tooLong} onClick={() => setMode('confirm')}>
@@ -132,8 +142,8 @@ export function DecisionPanel({ cluster, caption: initialCaption, onDecided }: P
             <button className="btn" disabled={busy} onClick={() => { setMode('idle'); setError(null); }}>{t('dec.cancel')}</button>
           </>
         )}
-      </div>
-      <p className="muted small">{t('dec.hint')}</p>
-    </section>
+      </m.div>
+      <m.p className="muted small" layout="position" transition={spring}>{t('dec.hint')}</m.p>
+    </m.section>
   );
 }

@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import type { Basemap } from '../types';
 import type { LiteReason } from '../lib/device';
 import type { LayerKey } from '../map/layers';
 import { LAYER_KEYS } from '../map/layers';
 import { useI18n } from '../i18n';
+import { exitFast, m, spring } from '../motion';
 import { IconX } from './icons';
 
 interface Props {
@@ -34,47 +36,54 @@ export function LayerControl({ basemap, basemaps, layers, lite, liteReason, lite
   ];
 
   return (
-    <div className="layer-ctl">
+    // layout="position": saat panel membuka/menutup, saudaranya dalam LayoutGroup (inspektur piksel) ikut meluncur
+    <m.div className="layer-ctl" layout="position" transition={spring}>
       <button className="map-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="layer-panel">
         <IconLayers /><span>{t('lc.title')}</span>
       </button>
-      {open && (
-        <div className="layer-panel" id="layer-panel" role="dialog" aria-label={t('lc.title')}>
-          <header>
-            <b>{t('lc.title')}</b>
-            <button className="icon-btn sm" onClick={() => setOpen(false)} aria-label={t('insp.close')}><IconX size={13} /></button>
-          </header>
-          <fieldset>
-            <legend>{t('lc.basemap')}</legend>
-            {options.map((o) => (
-              <label key={o.id} className="opt">
-                <input type="radio" name="basemap" checked={basemap === o.id} onChange={() => onBasemap(o.id)} />
-                <span>{o.label}</span>
+      <AnimatePresence>
+        {open && (
+          <m.div
+            key="panel" className="layer-panel" id="layer-panel" role="dialog" aria-label={t('lc.title')}
+            initial={{ opacity: 0, scale: 0.94, y: -8 }} animate={{ opacity: 1, scale: 1, y: 0, transition: spring }}
+            exit={{ opacity: 0, scale: 0.97, y: -4, transition: exitFast }}
+          >
+            <header>
+              <b>{t('lc.title')}</b>
+              <button className="icon-btn sm" onClick={() => setOpen(false)} aria-label={t('insp.close')}><IconX size={13} /></button>
+            </header>
+            <fieldset>
+              <legend>{t('lc.basemap')}</legend>
+              {options.map((o) => (
+                <label key={o.id} className="opt">
+                  <input type="radio" name="basemap" checked={basemap === o.id} onChange={() => onBasemap(o.id)} />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+              <p className="muted small">{t('lc.base_note')}</p>
+            </fieldset>
+            <fieldset>
+              <legend>{t('lc.layers')}</legend>
+              {LAYER_KEYS.map((k) => (
+                <label key={k} className="opt switch">
+                  <span>{t(`lc.layer_${k}`)}</span>
+                  <input type="checkbox" role="switch" checked={layers[k]} onChange={(e) => onLayer(k, e.target.checked)} />
+                </label>
+              ))}
+            </fieldset>
+            <fieldset>
+              <legend>{t('lc.performance')}</legend>
+              <label className="opt switch">
+                <span>{t('lc.lite')}</span>
+                <input type="checkbox" role="switch" checked={lite} onChange={(e) => onLite(e.target.checked)} />
               </label>
-            ))}
-            <p className="muted small">{t('lc.base_note')}</p>
-          </fieldset>
-          <fieldset>
-            <legend>{t('lc.layers')}</legend>
-            {LAYER_KEYS.map((k) => (
-              <label key={k} className="opt switch">
-                <span>{t(`lc.layer_${k}`)}</span>
-                <input type="checkbox" role="switch" checked={layers[k]} onChange={(e) => onLayer(k, e.target.checked)} />
-              </label>
-            ))}
-          </fieldset>
-          <fieldset>
-            <legend>{t('lc.performance')}</legend>
-            <label className="opt switch">
-              <span>{t('lc.lite')}</span>
-              <input type="checkbox" role="switch" checked={lite} onChange={(e) => onLite(e.target.checked)} />
-            </label>
-            <p className="muted small">
-              {liteAuto && liteReason ? t('lc.lite_auto', { why: t(`lc.why_${liteReason}`) }) : t('lc.lite_note')}
-            </p>
-          </fieldset>
-        </div>
-      )}
-    </div>
+              <p className="muted small">
+                {liteAuto && liteReason ? t('lc.lite_auto', { why: t(`lc.why_${liteReason}`) }) : t('lc.lite_note')}
+              </p>
+            </fieldset>
+          </m.div>
+        )}
+      </AnimatePresence>
+    </m.div>
   );
 }

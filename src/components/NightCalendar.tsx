@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, type Variants } from 'motion/react';
 import type { NightSummary } from '../types';
 import { api } from '../api';
 import { useI18n } from '../i18n';
 import { fmtNight } from '../lib/format';
+import { exitFast, m, spring, springSoft } from '../motion';
 import { Select } from './Select';
 
 interface Props {
@@ -21,6 +23,16 @@ const addMonths = (ym: string, n: number) => {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
 };
 
+// Satu bulan = 6 baris tetap, jadi tinggi kalender tidak melompat saat pindah bulan.
+const CELLS = 42;
+
+// Bulan baru masuk dari arah tujuan (maju = dari kanan), bulan lama keluar ke arah sebaliknya.
+const slide: Variants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 28 }),
+  center: { opacity: 1, x: 0, transition: springSoft },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -28, transition: exitFast }),
+};
+
 /**
  * Kalender malam arsip: satu bulan per tampilan, pindah bulan dan tahun, malam tanpa data
  * dinonaktifkan, malam yang punya kelompok AWAS diberi titik. Isinya dari GET /operator/nights?month=.
@@ -29,6 +41,8 @@ export function NightCalendar({ value, first, last, onPick, onClose }: Props) {
   const { t, lang } = useI18n();
   const locale = lang === 'id' ? 'id-ID' : 'en-US';
   const [month, setMonth] = useState(monthOf(value));
+  const [dir, setDir] = useState(1); // arah pindah bulan terakhir: 1 maju, -1 mundur
+  const goMonth = (ym: string) => { setDir(ym > month ? 1 : -1); setMonth(ym); };
   const [days, setDays] = useState<Map<string, NightSummary> | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -82,13 +96,14 @@ export function NightCalendar({ value, first, last, onPick, onClose }: Props) {
   for (let y = Number(first.slice(0, 4)); y <= Number(last.slice(0, 4)); y++) years.push(y);
   const clamp = (ym: string) => (ym < firstMonth ? firstMonth : ym > lastMonth ? lastMonth : ym);
 
-  const [y, m] = month.split('-').map(Number);
-  const lead = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7; // kolom pertama = Senin
-  const count = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const [year, mon] = month.split('-').map(Number); // bukan `m`: itu komponen gerak
+  const lead = (new Date(Date.UTC(year, mon - 1, 1)).getUTCDay() + 6) % 7; // kolom pertama = Senin
+  const count = new Date(Date.UTC(year, mon, 0)).getUTCDate();
   const cells: (string | null)[] = [
     ...Array<null>(lead).fill(null),
     ...Array.from({ length: count }, (_, i) => `${month}-${pad(i + 1)}`),
   ];
+  while (cells.length < CELLS) cells.push(null);
 
   const dayLabel = (d: string, s: NightSummary | undefined) => {
     const date = fmtNight(d, lang);
@@ -97,40 +112,50 @@ export function NightCalendar({ value, first, last, onPick, onClose }: Props) {
   };
 
   return (
-    <div className="cal" ref={root} role="dialog" aria-label={t('cal.title')}>
+    <m.div
+      className="cal" ref={root} role="dialog" aria-label={t('cal.title')}
+      initial={{ opacity: 0, scale: 0.92, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0, transition: spring }}
+      exit={{ opacity: 0, scale: 0.96, y: 6, transition: exitFast }}
+    >
       <div className="cal-head">
-        <button className="icon-btn sm" onClick={() => setMonth(addMonths(month, -1))} disabled={month <= firstMonth} aria-label={t('cal.prev_month')}>‹</button>
+        <button className="icon-btn sm" onClick={() => goMonth(addMonths(month, -1))} disabled={month <= firstMonth} aria-label={t('cal.prev_month')}>‹</button>
         <Select
-          size="sm" className="cal-month" label={t('cal.month')} value={String(m)}
-          onChange={(v) => setMonth(clamp(`${y}-${pad(Number(v))}`))}
+          size="sm" className="cal-month" label={t('cal.month')} value={String(mon)}
+          onChange={(v) => goMonth(clamp(`${year}-${pad(Number(v))}`))}
           items={monthNames.map((name, i) => {
-            const ym = `${y}-${pad(i + 1)}`;
+            const ym = `${year}-${pad(i + 1)}`;
             return { value: String(i + 1), label: name, disabled: ym < firstMonth || ym > lastMonth };
           })}
         />
         <Select
-          size="sm" className="cal-year" label={t('cal.year')} value={String(y)}
-          onChange={(v) => setMonth(clamp(`${v}-${pad(m)}`))}
+          size="sm" className="cal-year" label={t('cal.year')} value={String(year)}
+          onChange={(v) => goMonth(clamp(`${v}-${pad(mon)}`))}
           items={years.map((yy) => ({ value: String(yy), label: String(yy) }))}
         />
-        <button className="icon-btn sm" onClick={() => setMonth(addMonths(month, 1))} disabled={month >= lastMonth} aria-label={t('cal.next_month')}>›</button>
+        <button className="icon-btn sm" onClick={() => goMonth(addMonths(month, 1))} disabled={month >= lastMonth} aria-label={t('cal.next_month')}>›</button>
       </div>
 
-      <div className="cal-grid" aria-busy={!days}>
-        {weekdays.map((w) => <span key={w} className="cal-dow" aria-hidden="true">{w}</span>)}
-        {cells.map((d, i) => {
-          if (!d) return <span key={`x${i}`} />;
-          const s = days?.get(d);
-          return (
-            <button
-              key={d} className={`cal-day${d === value ? ' on' : ''}${s?.awas_clusters ? ' hot' : ''}`}
-              disabled={!s?.has_data} aria-pressed={d === value} aria-label={dayLabel(d, s)} title={dayLabel(d, s)}
-              onClick={() => onPick(d)}
-            >
-              {Number(d.slice(8))}
-            </button>
-          );
-        })}
+      <div className="cal-dows" aria-hidden="true">
+        {weekdays.map((w) => <span key={w} className="cal-dow">{w}</span>)}
+      </div>
+      <div className="cal-body">
+        <AnimatePresence initial={false} mode="popLayout" custom={dir}>
+          <m.div key={month} className="cal-grid" aria-busy={!days} custom={dir} variants={slide} initial="enter" animate="center" exit="exit">
+            {cells.map((d, i) => {
+              if (!d) return <span key={`x${i}`} />;
+              const s = days?.get(d);
+              return (
+                <button
+                  key={d} className={`cal-day${d === value ? ' on' : ''}${s?.awas_clusters ? ' hot' : ''}`}
+                  disabled={!s?.has_data} aria-pressed={d === value} aria-label={dayLabel(d, s)} title={dayLabel(d, s)}
+                  onClick={() => onPick(d)}
+                >
+                  {Number(d.slice(8))}
+                </button>
+              );
+            })}
+          </m.div>
+        </AnimatePresence>
       </div>
 
       {error ? (
@@ -140,6 +165,6 @@ export function NightCalendar({ value, first, last, onPick, onClose }: Props) {
       ) : (
         <p className="cal-note"><i className="cal-dot" aria-hidden="true" />{t('cal.legend_awas')} · {t('cal.legend_none')}</p>
       )}
-    </div>
+    </m.div>
   );
 }
