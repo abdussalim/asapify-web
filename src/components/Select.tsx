@@ -1,0 +1,176 @@
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { IconCheck } from './icons';
+
+export interface SelectOption { value: string; label: string; disabled?: boolean }
+export interface SelectGroup { label: string; options: SelectOption[] }
+type Item = SelectOption | SelectGroup;
+const isGroup = (x: Item): x is SelectGroup => 'options' in x;
+
+interface Props {
+  value: string;
+  items: Item[];
+  onChange(value: string): void;
+  label?: string; // nama aksesibel bila tidak ada label terlihat
+  labelledBy?: string; // id label terlihat
+  size?: 'md' | 'sm';
+  align?: 'start' | 'end'; // sisi daftar pilihan menempel
+  className?: string;
+}
+
+const MAX_H = 300;
+
+/**
+ * Dropdown buatan sendiri (pola ARIA listbox) pengganti <select> bawaan, supaya tampil sama di semua
+ * browser. Keyboard: panah, Home/End, Enter/Spasi, Escape, dan ketik huruf untuk melompat ke pilihan.
+ */
+export function Select({ value, items, onChange, label, labelledBy, size = 'md', align = 'start', className = '' }: Props) {
+  const id = useId();
+  const btnId = `${id}-btn`;
+  const listId = `${id}-list`;
+  const flat = useMemo(() => items.flatMap((x) => (isGroup(x) ? x.options : [x])), [items]);
+  const indexOf = useMemo(() => new Map(flat.map((o, i) => [o.value, i])), [flat]);
+  const selected = flat.find((o) => o.value === value);
+
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [place, setPlace] = useState<{ up: boolean; maxH: number }>({ up: false, maxH: MAX_H });
+  const root = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const typed = useRef({ text: '', at: 0 });
+
+  /** Indeks pilihan aktif berikutnya dari `from` ke arah `step`; -1 bila habis. */
+  const nextEnabled = (from: number, step: 1 | -1) => {
+    for (let i = from; i >= 0 && i < flat.length; i += step) if (!flat[i].disabled) return i;
+    return -1;
+  };
+
+  const show = () => {
+    const cur = indexOf.get(value) ?? -1;
+    setActive(cur >= 0 && !flat[cur].disabled ? cur : nextEnabled(0, 1));
+    setOpen(true);
+  };
+  const hide = (refocus = true) => {
+    setOpen(false);
+    if (refocus) btn.current?.focus();
+  };
+  const pick = (i: number) => {
+    const o = flat[i];
+    if (!o || o.disabled) return;
+    hide();
+    if (o.value !== value) onChange(o.value);
+  };
+
+  // Buka ke atas bila ruang di bawah tombol tidak cukup, lalu pindahkan fokus ke daftar. Ruang dihitung
+  // terhadap wadah pemotong terdekat (mis. panel yang bisa digulir), bukan hanya jendela.
+  useLayoutEffect(() => {
+    if (!open || !btn.current || !list.current) return;
+    const r = btn.current.getBoundingClientRect();
+    let top = 0, bottom = window.innerHeight;
+    for (let el = root.current?.parentElement; el; el = el.parentElement) {
+      if (getComputedStyle(el).overflowY === 'visible') continue;
+      const c = el.getBoundingClientRect();
+      top = Math.max(top, c.top);
+      bottom = Math.min(bottom, c.bottom);
+      break;
+    }
+    const need = Math.min(list.current.scrollHeight, MAX_H);
+    const below = bottom - r.bottom - 8;
+    const above = r.top - top - 8;
+    const up = below < need && above > below;
+    setPlace({ up, maxH: Math.max(120, Math.min(MAX_H, up ? above : below)) });
+    list.current.focus({ preventScroll: true });
+  }, [open]);
+
+  // Gulir di dalam daftar saja; scrollIntoView ikut menggulir panel induk.
+  useEffect(() => {
+    const ul = list.current;
+    const el = open && active >= 0 ? ul?.querySelector<HTMLElement>(`[data-i="${active}"]`) : null;
+    if (!ul || !el) return;
+    const top = el.offsetTop, bottom = top + el.offsetHeight;
+    if (top < ul.scrollTop) ul.scrollTop = top - 4;
+    else if (bottom > ul.scrollTop + ul.clientHeight) ul.scrollTop = bottom - ul.clientHeight + 4;
+  }, [open, active]);
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', down);
+    return () => document.removeEventListener('pointerdown', down);
+  }, [open]);
+
+  const onButtonKey = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      show();
+    }
+  };
+
+  const onListKey = (e: KeyboardEvent) => {
+    const move = (i: number) => { if (i >= 0) setActive(i); };
+    switch (e.key) {
+      case 'ArrowDown': e.preventDefault(); move(nextEnabled(active + 1, 1)); break;
+      case 'ArrowUp': e.preventDefault(); move(nextEnabled(active - 1, -1)); break;
+      case 'Home': e.preventDefault(); move(nextEnabled(0, 1)); break;
+      case 'End': e.preventDefault(); move(nextEnabled(flat.length - 1, -1)); break;
+      case 'Enter': case ' ': e.preventDefault(); pick(active); break;
+      case 'Escape': e.preventDefault(); e.stopPropagation(); hide(); break; // jangan ikut menutup kalender induk
+      case 'Tab': hide(false); break;
+      default: {
+        if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+        const now = Date.now();
+        const t = typed.current;
+        t.text = (now - t.at > 600 ? '' : t.text) + e.key.toLowerCase();
+        t.at = now;
+        move(flat.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(t.text)));
+      }
+    }
+  };
+
+  const option = (o: SelectOption) => {
+    const i = indexOf.get(o.value)!;
+    const isSel = o.value === value;
+    return (
+      <li
+        key={o.value} id={`${id}-o${i}`} data-i={i} role="option" aria-selected={isSel} aria-disabled={o.disabled || undefined}
+        className={`sel-opt${i === active ? ' active' : ''}${isSel ? ' chosen' : ''}`}
+        onPointerMove={() => { if (!o.disabled) setActive(i); }}
+        onClick={() => pick(i)}
+      >
+        <span>{o.label}</span>
+        {isSel && <IconCheck size={14} />}
+      </li>
+    );
+  };
+
+  return (
+    <div ref={root} className={`sel ${size}${align === 'end' ? ' end' : ''} ${className}`}>
+      <button
+        ref={btn} id={btnId} type="button" className="sel-btn" aria-haspopup="listbox" aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-labelledby={labelledBy ? `${labelledBy} ${btnId}` : undefined}
+        aria-label={labelledBy ? undefined : `${label ?? ''}: ${selected?.label ?? ''}`}
+        onClick={() => (open ? hide() : show())} onKeyDown={onButtonKey}
+      >
+        <span className="sel-value">{selected?.label ?? ''}</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5L6 7.5L9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <ul
+          ref={list} id={listId} role="listbox" tabIndex={-1} className={`sel-list${place.up ? ' up' : ''}`} style={{ maxHeight: place.maxH }}
+          aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}
+          aria-activedescendant={active >= 0 ? `${id}-o${active}` : undefined} onKeyDown={onListKey}
+        >
+          {items.map((x) => (isGroup(x) ? (
+            <li key={`g-${x.label}`} role="group" aria-label={x.label} className="sel-grp">
+              <span className="sel-grp-label" aria-hidden="true">{x.label}</span>
+              <ul role="none">{x.options.map(option)}</ul>
+            </li>
+          ) : option(x)))}
+        </ul>
+      )}
+    </div>
+  );
+}

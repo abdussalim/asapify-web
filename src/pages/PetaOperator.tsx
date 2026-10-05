@@ -20,6 +20,7 @@ import { DecisionState } from '../components/DecisionPanel';
 import { SlotPlayer } from '../components/SlotPlayer';
 import { PixelInspector } from '../components/PixelInspector';
 import { LayerControl } from '../components/LayerControl';
+import { Select } from '../components/Select';
 import { StatusIcon } from '../components/icons';
 
 const ALL: Status[] = ['AWAS', 'WATCH', 'NO_OBSERVATION', 'SAFE'];
@@ -280,29 +281,31 @@ export function PetaOperator({ dark }: { dark: boolean }) {
               </button>
             ))}
           </div>
-          <label className="select">
-            <span className="lbl">{t('map.filter_province')}</span>
-            <select value={province} onChange={(e) => setProvince(e.target.value as ProvinceCode | '')}>
-              <option value="">{t('map.all_provinces')}</option>
-              {ISLANDS.map((isl) => (
-                <optgroup key={isl} label={t(`island.${isl}`)}>
-                  {provincesOf(isl).map((p) => <option key={p} value={p}>{t(`prov.${p}`)}</option>)}
-                </optgroup>
-              ))}
-            </select>
-          </label>
+          <div className="select">
+            <span className="lbl" id="prov-lbl">{t('map.filter_province')}</span>
+            <Select
+              labelledBy="prov-lbl" value={province} onChange={(v) => setProvince(v as ProvinceCode | '')}
+              items={[
+                { value: '', label: t('map.all_provinces') },
+                ...ISLANDS.map((isl) => ({
+                  label: t(`island.${isl}`),
+                  options: provincesOf(isl).map((p) => ({ value: p, label: t(`prov.${p}`) })),
+                })),
+              ]}
+            />
+          </div>
         </div>
 
         <div className="list-head">
           <b>{t('map.clusters_title', { n: visible.length })}</b>
-          <label className="sort">
-            <span className="sr-only">{t('map.sort_label')}</span>
-            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t('map.sort_label')}>
-              <option value="utility">{t('map.sort_utility')}</option>
-              <option value="newest">{t('map.sort_newest')}</option>
-              <option value="oldest">{t('map.sort_oldest')}</option>
-            </select>
-          </label>
+          <Select
+            size="sm" align="end" label={t('map.sort_label')} value={sort} onChange={(v) => setSort(v as Sort)}
+            items={[
+              { value: 'utility', label: t('map.sort_utility') },
+              { value: 'newest', label: t('map.sort_newest') },
+              { value: 'oldest', label: t('map.sort_oldest') },
+            ]}
+          />
         </div>
 
         {loadError && (

@@ -57,17 +57,17 @@ export function LayerControl({ basemap, basemaps, layers, lite, liteReason, lite
           <fieldset>
             <legend>{t('lc.layers')}</legend>
             {LAYER_KEYS.map((k) => (
-              <label key={k} className="opt">
-                <input type="checkbox" checked={layers[k]} onChange={(e) => onLayer(k, e.target.checked)} />
+              <label key={k} className="opt switch">
                 <span>{t(`lc.layer_${k}`)}</span>
+                <input type="checkbox" role="switch" checked={layers[k]} onChange={(e) => onLayer(k, e.target.checked)} />
               </label>
             ))}
           </fieldset>
           <fieldset>
             <legend>{t('lc.performance')}</legend>
-            <label className="opt">
-              <input type="checkbox" checked={lite} onChange={(e) => onLite(e.target.checked)} />
+            <label className="opt switch">
               <span>{t('lc.lite')}</span>
+              <input type="checkbox" role="switch" checked={lite} onChange={(e) => onLite(e.target.checked)} />
             </label>
             <p className="muted small">
               {liteAuto && liteReason ? t('lc.lite_auto', { why: t(`lc.why_${liteReason}`) }) : t('lc.lite_note')}

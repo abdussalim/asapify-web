@@ -3,6 +3,7 @@ import type { NightSummary } from '../types';
 import { api } from '../api';
 import { useI18n } from '../i18n';
 import { fmtNight } from '../lib/format';
+import { Select } from './Select';
 
 interface Props {
   value: string; // malam yang sedang dibuka, YYYY-MM-DD
@@ -99,15 +100,19 @@ export function NightCalendar({ value, first, last, onPick, onClose }: Props) {
     <div className="cal" ref={root} role="dialog" aria-label={t('cal.title')}>
       <div className="cal-head">
         <button className="icon-btn sm" onClick={() => setMonth(addMonths(month, -1))} disabled={month <= firstMonth} aria-label={t('cal.prev_month')}>‹</button>
-        <select value={m} onChange={(e) => setMonth(clamp(`${y}-${pad(Number(e.target.value))}`))} aria-label={t('cal.month')}>
-          {monthNames.map((name, i) => {
+        <Select
+          size="sm" className="cal-month" label={t('cal.month')} value={String(m)}
+          onChange={(v) => setMonth(clamp(`${y}-${pad(Number(v))}`))}
+          items={monthNames.map((name, i) => {
             const ym = `${y}-${pad(i + 1)}`;
-            return <option key={i} value={i + 1} disabled={ym < firstMonth || ym > lastMonth}>{name}</option>;
+            return { value: String(i + 1), label: name, disabled: ym < firstMonth || ym > lastMonth };
           })}
-        </select>
-        <select value={y} onChange={(e) => setMonth(clamp(`${e.target.value}-${pad(m)}`))} aria-label={t('cal.year')}>
-          {years.map((yy) => <option key={yy} value={yy}>{yy}</option>)}
-        </select>
+        />
+        <Select
+          size="sm" className="cal-year" label={t('cal.year')} value={String(y)}
+          onChange={(v) => setMonth(clamp(`${v}-${pad(m)}`))}
+          items={years.map((yy) => ({ value: String(yy), label: String(yy) }))}
+        />
         <button className="icon-btn sm" onClick={() => setMonth(addMonths(month, 1))} disabled={month >= lastMonth} aria-label={t('cal.next_month')}>›</button>
       </div>
 
