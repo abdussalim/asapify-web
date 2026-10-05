@@ -1,7 +1,7 @@
 import {
   ApiError,
   type Api, type Attributes, type Basemap, type ClusterDetail, type ClusterSummary, type Decision, type Grid,
-  type GridCompact, type LngLat, type Meta, type Neighbour, type NeighbourDir, type NightCompact,
+  type GridCompact, type LngLat, type Meta, type Neighbour, type NeighbourDir, type NightCompact, type NightSummary,
   type PeatBoundary, type PixelIndex, type ProvinceBoundary, type ProvinceCode, type SeriesPoint, type Status, type StatusCode,
   type VerificationDetail,
 } from '../types';
@@ -11,10 +11,11 @@ import { currentScenario, type Scenario } from './scenario';
 
 // Data FIKTIF untuk demo tanpa backend: replay 24 Sep 2023 di gambut Sumatra + Kalimantan
 // (15 provinsi; Kalteng = BACKTEST_BBOX 113.5,-2.6,114.3,-1.9). Bentuk mengikuti backend.html + usulan FE.
-// Arsip malam 1–24 Sep 2023 bisa dibuka lewat pemilih malam.
+// Arsip malam 16 Feb–24 Sep 2023 bisa dibuka lewat kalender di pemutar slot.
 
 const AS_OF = '2023-09-24T15:10:00Z'; // 22.10 WIB
-const ARCHIVE_FIRST = '2023-09-01'; // awal jendela backtest
+const ARCHIVE_FIRST = '2023-02-16'; // arsip GK2A di NOAA mulai di sini; AWAS butuh dua satelit
+const OUTAGES = new Set(['2023-04-11', '2023-07-02', '2023-08-19']); // malam tanpa data (gangguan fiktif)
 const STEP = 0.02;
 const ORIGIN: LngLat = [94.9, 6.2]; // grid gabungan Sumatra + Kalimantan
 
@@ -584,10 +585,10 @@ const slotsOf = (night: string) => {
 };
 const AREA_CENTERS: LngLat[] = AREAS.map(({ rings: [r] }) => [r.reduce((s, p) => s + p[0], 0) / r.length, r.reduce((s, p) => s + p[1], 0) / r.length]);
 
-/** Slot terakhir yang sudah dievaluasi pada malam ini; -1 bila di luar arsip. */
+/** Slot terakhir yang sudah dievaluasi pada malam ini; -1 bila di luar arsip atau malam tanpa data. */
 function lastSlotOf(night: string): number {
   const asOfNight = nightOf(AS_OF);
-  if (night > asOfNight || night < ARCHIVE_FIRST) return -1;
+  if (night > asOfNight || night < ARCHIVE_FIRST || OUTAGES.has(night)) return -1;
   return night === asOfNight ? Math.round((Date.parse(AS_OF) - Date.parse(`${night}T13:00:00Z`)) / SLOT_MS) : NIGHT_SLOTS - 1;
 }
 
@@ -677,6 +678,20 @@ function buildNight(sc: Scenario, night: string): NightCompact {
   return out;
 }
 
+/** Ringkasan per malam dalam satu bulan (YYYY-MM) untuk kalender; malam di luar arsip tidak dikirim. */
+function buildNights(sc: Scenario, month: string): NightSummary[] {
+  const [y, m] = month.split('-').map(Number);
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const out: NightSummary[] = [];
+  for (let d = 1; d <= days; d++) {
+    const night = `${month}-${String(d).padStart(2, '0')}`;
+    if (night < ARCHIVE_FIRST || night > nightOf(AS_OF)) continue;
+    const has = lastSlotOf(night) >= 0;
+    out.push({ night, has_data: has, awas_clusters: has && sc !== 'kosong' ? DEFS.filter((x) => awasOn(x, night)).length : 0 });
+  }
+  return out;
+}
+
 function buildBasemaps(): Basemap[] {
   const day = AS_OF.slice(0, 10);
   return [{
@@ -700,6 +715,7 @@ export const mockApi: Api = {
   pixels: () => wait(buildPixels(), 200),
   gridCompact: () => wait(buildCompact(currentScenario()), 250),
   night: (night) => wait(buildNight(currentScenario(), night), 300),
+  nights: (month) => wait(buildNights(currentScenario(), month), 120),
   basemaps: () => wait(buildBasemaps(), 100),
   provinces: async () => {
     const r = await fetch(`${import.meta.env.BASE_URL}mock/provinces.geojson`);
@@ -748,6 +764,7 @@ export function contractExamples() {
     pixels: buildPixels(),
     gridCompact: buildCompact('normal'),
     night: buildNight('normal', nightOf(AS_OF)),
+    nights: buildNights('normal', nightOf(AS_OF).slice(0, 7)).slice(12),
     basemaps: buildBasemaps(),
     clusters: [toSummary(detail('C-0923-001')), toSummary(detail('C-0924-001'))],
     cluster: detail('C-0924-002'),

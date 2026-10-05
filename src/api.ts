@@ -1,7 +1,7 @@
 import {
   ApiError,
   type Api, type Basemap, type ClusterDetail, type ClusterSummary, type GridCompact, type Meta,
-  type NightCompact, type PeatBoundary, type PixelIndex, type ProvinceBoundary,
+  type NightCompact, type NightSummary, type PeatBoundary, type PixelIndex, type ProvinceBoundary,
 } from './types';
 
 export const API_MODE: 'mock' | 'live' = import.meta.env.VITE_API_MODE === 'live' ? 'live' : 'mock';
@@ -40,6 +40,7 @@ const liveApi: Api = {
   pixels: () => req<PixelIndex>('/operator/pixels'),
   gridCompact: (asOf) => req<GridCompact>(`/operator/grid?format=compact${asOf ? `&as_of=${enc(asOf)}` : ''}`),
   night: (night) => req<NightCompact>(`/operator/grid/night?night=${enc(night)}`),
+  nights: (month) => req<NightSummary[]>(`/operator/nights?month=${enc(month)}`),
   basemaps: () => req<Basemap[]>('/operator/basemaps'),
   clusters: (night) => req<ClusterSummary[]>(night ? `/operator/clusters?night=${enc(night)}` : '/operator/clusters?state=active'),
   cluster: (id) => req<ClusterDetail>(`/operator/clusters/${enc(id)}`),
@@ -57,6 +58,7 @@ const mockApi: Api = {
   pixels: () => mock().then((m) => m.pixels()),
   gridCompact: (asOf) => mock().then((m) => m.gridCompact(asOf)),
   night: (night) => mock().then((m) => m.night(night)),
+  nights: (month) => mock().then((m) => m.nights(month)),
   basemaps: () => mock().then((m) => m.basemaps()),
   clusters: (night) => mock().then((m) => m.clusters(night)),
   cluster: (id) => mock().then((m) => m.cluster(id)),

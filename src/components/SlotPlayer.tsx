@@ -1,8 +1,10 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { Meta, NightCompact, SatState } from '../types';
 import { useI18n } from '../i18n';
 import { fmtNight, fmtTime } from '../lib/format';
 import { NIGHT_SLOTS, SLOT_MS, slotIndex } from '../lib/grid';
+import { NightCalendar } from './NightCalendar';
+import { IconCalendar } from './icons';
 
 interface Props {
   meta: Meta;
@@ -23,7 +25,7 @@ const shiftDay = (d: string, n: number) => new Date(Date.parse(d) + n * DAY_MS).
 
 /**
  * Pita malam yang bisa diputar: baris ▲ = jumlah piksel AWAS per slot, baris H/G = data satelit
- * yang tersedia. Pemilih malam membuka arsip. Penggeser (input range) menumpuk di atas pita agar bisa dipakai dengan keyboard.
+ * yang tersedia. Kalender membuka malam arsip. Penggeser (input range) menumpuk di atas pita agar bisa dipakai dengan keyboard.
  */
 export function SlotPlayer({ meta, nightKey, night, isCurrent, slot, last, playing, onSlot, onPlay, onNight }: Props) {
   const { t, lang } = useI18n();
@@ -34,11 +36,8 @@ export function SlotPlayer({ meta, nightKey, night, isCurrent, slot, last, playi
   const awas = useMemo(() => night?.status.map((s) => (s == null ? null : s.split('A').length - 1)) ?? [], [night]);
   const maxAwas = Math.max(1, ...awas.map((n) => n ?? 0));
 
-  const nights = useMemo(() => {
-    const out: string[] = [];
-    for (let d = meta.nights.last; d >= meta.nights.first; d = shiftDay(d, -1)) out.push(d);
-    return out;
-  }, [meta.nights.first, meta.nights.last]);
+  const [calOpen, setCalOpen] = useState(false);
+  const closeCal = useCallback(() => setCalOpen(false), []);
 
   const sats: [string, SatState][] = [['H', meta.sats.himawari], ['G', meta.sats.gk2a]];
   const ticks = [0, 12, 24, 36, 48];
@@ -46,6 +45,7 @@ export function SlotPlayer({ meta, nightKey, night, isCurrent, slot, last, playi
   const prev = shiftDay(nightKey, -1), next = shiftDay(nightKey, 1);
   const goto = (d: string) => onNight(d === meta.nights.last ? null : d);
   const title = fmtNight(nightKey, lang);
+  const nightLabel = nightKey === meta.nights.last ? t('player.night_latest', { date: title }) : title;
 
   return (
     <div className="player" role="group" aria-label={t('player.title', { date: title })}>
@@ -62,12 +62,19 @@ export function SlotPlayer({ meta, nightKey, night, isCurrent, slot, last, playi
         </span>
         <span className="night-pick">
           <button className="icon-btn sm" onClick={() => goto(prev)} disabled={prev < meta.nights.first} aria-label={t('player.night_prev')}>‹</button>
-          <select value={nightKey} onChange={(e) => goto(e.target.value)} aria-label={t('player.night_pick')}>
-            {nights.map((d) => (
-              <option key={d} value={d}>{d === meta.nights.last ? t('player.night_latest', { date: fmtNight(d, lang) }) : fmtNight(d, lang)}</option>
-            ))}
-          </select>
+          <button
+            className="night-btn" onClick={() => setCalOpen((o) => !o)} aria-expanded={calOpen} aria-haspopup="dialog"
+            aria-label={`${t('player.night_pick')}: ${nightLabel}`}
+          >
+            <IconCalendar size={14} /><span>{nightLabel}</span>
+          </button>
           <button className="icon-btn sm" onClick={() => goto(next)} disabled={next > meta.nights.last} aria-label={t('player.night_next')}>›</button>
+          {calOpen && (
+            <NightCalendar
+              value={nightKey} first={meta.nights.first} last={meta.nights.last} onClose={closeCal}
+              onPick={(d) => { setCalOpen(false); goto(d); }}
+            />
+          )}
         </span>
         <button className="link-btn" onClick={() => (isCurrent ? onSlot(last) : onNight(null))} disabled={atLatest}>{t('player.to_latest')}</button>
       </div>

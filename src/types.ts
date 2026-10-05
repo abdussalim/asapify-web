@@ -175,6 +175,13 @@ export interface NightCompact {
   clusters: Record<string, number[]>; // kelompok yang AWAS malam itu → indeks sel
 }
 
+/** Ringkasan satu malam untuk kalender: ada data atau tidak, dan berapa kelompok yang AWAS. */
+export interface NightSummary {
+  night: string; // YYYY-MM-DD
+  has_data: boolean;
+  awas_clusters: number;
+}
+
 export interface Basemap {
   id: string;
   label_id: string;
@@ -192,6 +199,7 @@ export interface Api {
   pixels(): Promise<PixelIndex>;
   gridCompact(asOf?: string): Promise<GridCompact>;
   night(night: string): Promise<NightCompact>;
+  nights(month: string): Promise<NightSummary[]>; // month = YYYY-MM
   basemaps(): Promise<Basemap[]>;
   clusters(night?: string): Promise<ClusterSummary[]>; // tanpa night = kelompok aktif
   cluster(id: string): Promise<ClusterDetail>;

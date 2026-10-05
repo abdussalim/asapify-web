@@ -45,8 +45,9 @@ Replay fiktif 24 Sep 2023 22.10 WIB. Setiap provinsi (10 Sumatra + 5 Kalimantan)
 gambut nyatanya, jadi filter provinsi mana pun menampilkan piksel. Lima kelompok AWAS: Kalteng (backtest, bbox
 `113.5,-2.6,114.3,-1.9`) `C-0924-002` bukti kuat, `C-0924-001` inkonklusif, `C-0923-001` sudah diterbitkan;
 Sumsel (OKI) `C-0924-003` bukti kuat; Riau (Kampar) `C-0924-004` inkonklusif.
-Arsip malam 1–24 Sep 2023 bisa dibuka lewat pemilih malam di pemutar slot; malam 15 Sep memuat kelompok lama
-`C-0915-001` (Kalbar, Kubu Raya) yang sudah ditolak dan ditutup.
+Arsip malam 16 Feb–24 Sep 2023 (awal arsip GK2A di NOAA) bisa dibuka lewat kalender di pemutar slot: tanggal pudar =
+tanpa data, titik = ada kelompok AWAS. Malam 11 Apr, 2 Jul, dan 19 Agu 2023 sengaja dibuat tanpa data. Malam 15 Sep
+memuat kelompok lama `C-0915-001` (Kalbar, Kubu Raya) yang sudah ditolak dan ditutup.
 Citra VIIRS diambil langsung dari NASA GIBS (citra asli tanggal itu); crop Himawari berupa ilustrasi SVG.
 Keputusan disimpan di memori dan hilang saat halaman dimuat ulang. Login hanya tiruan (tanpa Firebase).
 

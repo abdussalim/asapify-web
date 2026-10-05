@@ -8,7 +8,7 @@ const LATE_MIN = 40;
  * Slot terakhir + satelit; kuning bila satu satelit > 40 menit terlambat, biru untuk replay dan arsip.
  * Pita malam ada di SlotPlayer.
  */
-export function DataBanner({ meta, cloudy, archive }: { meta: Meta; cloudy: boolean; archive: string | null }) {
+export function DataBanner({ meta, cloudy, archive, noData }: { meta: Meta; cloudy: boolean; archive: string | null; noData: boolean }) {
   const { t, lang } = useI18n();
   const sats = [
     ['Himawari', meta.sats.himawari],
@@ -32,6 +32,7 @@ export function DataBanner({ meta, cloudy, archive }: { meta: Meta; cloudy: bool
         </span>
       </div>
       {archive && <div className="banner info">{t('banner.archive', { date: fmtNight(archive, lang) })}</div>}
+      {archive && noData && <div className="banner warn">{t('banner.no_data')}</div>}
       {!archive && meta.replay && <div className="banner info">{t('banner.replay', { when: fmtSlot(meta.as_of, lang) })}</div>}
       {late.length > 0 && <div className="banner warn">{t('banner.one_sat', { sat: late.map(([n]) => n).join(' + ') })}</div>}
       {!meta.is_night && <div className="banner">{t('banner.day')}</div>}

@@ -88,9 +88,14 @@ export function PetaOperator({ dark }: { dark: boolean }) {
 
   const latest = meta ? slotIndex(meta.last_slot, nightStart(meta.last_slot)) : 0;
   const last = isCurrent ? latest : nightData ? lastFilled(nightData.status) : NIGHT_SLOTS - 1;
-  const cur = slot ?? last;
+  // Malam arsip tanpa satu slot pun berisi data: semua piksel ditampilkan "tidak teramati".
+  const noData = !isCurrent && nightData != null && last < 0;
+  const allUnobserved = useMemo(() => (index ? 'N'.repeat(index.rows.length) : null), [index]);
+  const cur = slot ?? Math.max(0, last);
   const atLast = cur === last;
-  const statusStr = isCurrent && atLast ? (compact?.status ?? null) : (nightData?.status[cur] ?? null);
+  const statusStr = noData
+    ? allUnobserved
+    : isCurrent && atLast ? (compact?.status ?? null) : (nightData?.status[cur] ?? null);
   const clusterCells = isCurrent ? compact?.clusters : nightData?.clusters;
   const utility = useMemo(() => (compact ? decodeUtility(compact.utility) : null), [compact]);
   const clusterOfCell = useMemo(() => {
@@ -253,7 +258,7 @@ export function PetaOperator({ dark }: { dark: boolean }) {
           <span />
         </button>
 
-        {meta ? <DataBanner meta={meta} cloudy={cloudy} archive={isCurrent ? null : viewNight} /> : <div className="skel" style={{ height: 30 }} />}
+        {meta ? <DataBanner meta={meta} cloudy={cloudy && !noData} archive={isCurrent ? null : viewNight} noData={noData} /> : <div className="skel" style={{ height: 30 }} />}
 
         <form className="search" onSubmit={onSearch} role="search">
           <label htmlFor="map-q" className="lbl">{t('search.label')}</label>

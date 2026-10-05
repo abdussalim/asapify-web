@@ -351,10 +351,30 @@ button { font: inherit; color: inherit; }
 .player-slot { display: grid; line-height: 1.2; }
 .player-slot b { font-size: 15px; font-weight: 500; color: var(--ink); }
 .player-slot small { font-size: 10.5px; color: var(--ink-dim); }
-.night-pick { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
-.night-pick select { font: inherit; font-family: var(--font-body); font-size: 13px; min-height: 32px; max-width: 205px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 4px; }
+.night-pick { position: relative; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .night-pick .icon-btn.sm { font-size: 16px; line-height: 1; }
 .night-pick .icon-btn:disabled { opacity: 0.4; cursor: default; }
+.night-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font-family: var(--font-body); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.night-btn[aria-expanded="true"] { border-color: var(--sat); }
+
+/* kalender malam: muncul di atas pemutar */
+.cal { position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 10; width: 296px; display: grid; gap: 8px; padding: 10px 12px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
+  font-family: var(--font-body); font-size: 13px; }
+.cal-head { display: flex; align-items: center; gap: 6px; }
+.cal-head select { flex: 1; min-width: 0; min-height: 32px; font: inherit; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 0 4px; }
+.cal-head .icon-btn { font-size: 16px; line-height: 1; }
+.cal-head .icon-btn:disabled { opacity: 0.4; cursor: default; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.cal-dow { padding: 2px 0; text-align: center; font-size: 11.5px; color: var(--ink-dim); }
+.cal-day { position: relative; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-family: var(--font-mono); font-size: 13px; cursor: pointer; }
+.cal-day:hover:not(:disabled) { background: var(--surface-2); }
+.cal-day:disabled { color: var(--ink-dim); opacity: 0.35; cursor: default; }
+.cal-day.on { background: var(--ink); color: var(--surface); }
+.cal-day.hot::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--ember); }
+.cal-note { font-size: 12px; color: var(--ink-dim); }
+.cal-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ember); vertical-align: middle; }
 .player .link-btn { font-family: var(--font-body); font-size: 13px; }
 .player .link-btn:disabled { color: var(--ink-dim); cursor: default; text-decoration: none; }
 .ribbon { position: relative; display: grid; gap: 3px; border-radius: 4px; }
@@ -403,7 +423,8 @@ button { font: inherit; color: inherit; }
 @media (max-width: 520px) {
   .player-head { flex-wrap: wrap; row-gap: 4px; }
   .night-pick { order: 3; margin-left: 0; flex: 1 1 100%; }
-  .night-pick select { flex: 1; max-width: none; }
+  .night-btn { flex: 1; justify-content: center; }
+  .cal { left: 0; right: 0; width: auto; }
   .player .link-btn { margin-left: auto; }
 }
 

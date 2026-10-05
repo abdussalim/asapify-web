@@ -22,7 +22,7 @@ export interface Schema {
 export type ExampleKey =
   | 'health' | 'meta' | 'grid' | 'clusters' | 'cluster' | 'verifyReq' | 'verifyRes' | 'decisionReq'
   | 'decisionRes' | 'decisionErr' | 'alerts' | 'closeReq' | 'closeRes' | 'peat'
-  | 'pixels' | 'gridCompact' | 'night' | 'basemaps';
+  | 'pixels' | 'gridCompact' | 'night' | 'nights' | 'basemaps';
 
 export interface Endpoint {
   id: string;
@@ -141,7 +141,7 @@ export const SCHEMAS: Schema[] = [
       { name: 'n_sat', type: '0 | 1 | 2', req: true, desc: t('Jumlah satelit yang tersedia di last_slot.', 'Number of satellites available at last_slot.') },
       { name: 'sats.himawari', type: 'SatState', req: true, desc: t('Keadaan Himawari-9.', 'Himawari-9 state.') },
       { name: 'sats.gk2a', type: 'SatState', req: true, desc: t('Keadaan GK2A.', 'GK2A state.') },
-      { name: 'nights', type: '{ first: YYYY-MM-DD, last: YYYY-MM-DD }', req: true, desc: t('Rentang malam arsip yang bisa dibuka; mengisi pemilih malam di pemutar slot. `last` = malam dari last_slot.', 'Range of archive nights that can be opened; fills the night picker in the slot player. `last` = the night of last_slot.') },
+      { name: 'nights', type: '{ first: YYYY-MM-DD, last: YYYY-MM-DD }', req: true, desc: t('Rentang malam arsip yang bisa dibuka; membatasi kalender di pemutar slot. `first` paling awal 2023-02-16 (arsip GK2A di NOAA; AWAS butuh dua satelit); `last` = malam dari last_slot.', 'Range of archive nights that can be opened; bounds the calendar in the slot player. `first` is 2023-02-16 at the earliest (start of the GK2A archive on NOAA; AWAS needs both satellites); `last` = the night of last_slot.') },
     ],
   },
   {
@@ -199,6 +199,15 @@ export const SCHEMAS: Schema[] = [
       { name: 'status', type: '(string | null)[54]', req: true, desc: t('Format sama dengan GridCompact.status; null = slot belum dievaluasi atau tidak ada data.', 'Same format as GridCompact.status; null = slot not evaluated yet or no data.') },
       { name: 'n_sat', type: '(0 | 1 | 2 | null)[54]', req: true, desc: t('Satelit per slot.', 'Satellites per slot.') },
       { name: 'clusters', type: 'Record<cluster_id, integer[]>', req: true, desc: t('Kelompok yang AWAS di salah satu slot malam itu (aktif maupun sudah ditutup) → indeks sel. Garis kelompok di malam arsip digambar dari sini.', 'Clusters that were AWAS in any slot that night (active or closed) → cell indices. Cluster outlines on archive nights come from here.') },
+    ],
+  },
+  {
+    name: 'NightSummary', origin: 'fe',
+    desc: t('Ringkasan satu malam untuk kalender di pemutar slot.', 'Summary of one night for the calendar in the slot player.'),
+    fields: [
+      { name: 'night', type: 'string · YYYY-MM-DD', req: true, desc: t('night_id.', 'night_id.') },
+      { name: 'has_data', type: 'boolean', req: true, desc: t('false bila tidak satu slot pun dievaluasi (mis. data satelit tidak terunduh). UI menonaktifkan tanggal ini.', 'false when no slot was evaluated (e.g. satellite data never arrived). The UI disables this date.') },
+      { name: 'awas_clusters', type: 'integer ≥ 0', req: true, desc: t('Jumlah kelompok yang AWAS di salah satu slot malam itu; UI memberi titik pada tanggalnya.', 'Number of clusters that were AWAS in any slot that night; the UI marks the date with a dot.') },
     ],
   },
   {
@@ -475,7 +484,18 @@ export const ENDPOINTS: Endpoint[] = [
       { name: 'night', type: 'query · YYYY-MM-DD', req: true, origin: 'fe', desc: t('night_id (tanggal WIB malam dimulai), dalam rentang Meta.nights. Di luar rentang → VALIDATION.', 'night_id (WIB date the night starts), within Meta.nights. Outside the range → VALIDATION.') },
       AS_OF_PARAM,
     ],
-    responses: [{ code: 200, schema: 'NightCompact', example: 'night', note: t('Contoh dipotong.', 'Example trimmed.') }],
+    responses: [{ code: 200, schema: 'NightCompact', example: 'night', note: t('Contoh dipotong. Malam tanpa data: semua slot null dan `clusters` kosong.', 'Example trimmed. A night without data: every slot is null and `clusters` is empty.') }],
+    errors: ['UNAUTHENTICATED', 'FORBIDDEN', 'VALIDATION'],
+  },
+  {
+    id: 'nights', method: 'GET', path: '/operator/nights', auth: 'operator',
+    title: t('Ketersediaan malam per bulan', 'Night availability per month'),
+    purpose: t('Satu baris per malam arsip dalam bulan itu: ada data atau tidak, dan jumlah kelompok AWAS. Malam di luar Meta.nights tidak dikirim.', 'One row per archive night in that month: whether it has data and how many AWAS clusters it had. Nights outside Meta.nights are not sent.'),
+    usedBy: t('Peta → kalender di pemutar slot (tanggal pudar = tanpa data, titik = ada kelompok AWAS).', 'Map → calendar in the slot player (faded date = no data, dot = AWAS clusters).'),
+    params: [
+      { name: 'month', type: 'query · YYYY-MM', req: true, origin: 'fe', desc: t('Bulan yang ditampilkan kalender.', 'Month shown by the calendar.') },
+    ],
+    responses: [{ code: 200, schema: 'NightSummary', example: 'nights', note: t('NightSummary[], urut tanggal. Contoh dipotong.', 'NightSummary[], in date order. Example trimmed.') }],
     errors: ['UNAUTHENTICATED', 'FORBIDDEN', 'VALIDATION'],
   },
   {

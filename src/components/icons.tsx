@@ -28,6 +28,9 @@ export const IconHelp = ({ size }: P) => (
 );
 export const IconSend = ({ size }: P) => <svg {...base(size)}><path d="M14 2L7 9M14 2l-4.5 12L7 9 2 6.5z" /></svg>;
 export const IconX = ({ size }: P) => <svg {...base(size)}><path d="M4 4l8 8M12 4l-8 8" /></svg>;
+export const IconCalendar = ({ size }: P) => (
+  <svg {...base(size)}><rect x="2.2" y="3.2" width="11.6" height="10.6" rx="1.6" /><path d="M2.2 6.6h11.6M5.3 1.8v2.6M10.7 1.8v2.6" /></svg>
+);
 export const IconClock = ({ size }: P) => <svg {...base(size)}><circle cx="8" cy="8" r="6.2" /><path d="M8 4.5V8l2.3 1.5" /></svg>;
 export const IconArrowLeft = ({ size }: P) => <svg {...base(size)}><path d="M13 8H3M7 4L3 8l4 4" /></svg>;
 
