@@ -55,8 +55,8 @@ export const CONVENTIONS: { title: Txt; body: Txt }[] = [
   {
     title: t('Autentikasi', 'Authentication'),
     body: t(
-      'Endpoint `operator` wajib header `Authorization: Bearer <Firebase ID token>` dengan custom claim `role = "operator"`. Token tidak ada atau tidak sah → 401 `UNAUTHENTICATED`; tanpa peran operator → 403 `FORBIDDEN`. Endpoint `public` tanpa header. (Usulan FE; UI masih memakai login demo.)',
-      '`operator` endpoints require `Authorization: Bearer <Firebase ID token>` with custom claim `role = "operator"`. Missing or invalid token → 401 `UNAUTHENTICATED`; no operator role → 403 `FORBIDDEN`. `public` endpoints need no header. (FE proposal; the UI still uses a demo login.)',
+      'Endpoint `operator` wajib header `Authorization: Bearer <Firebase ID token>` dengan custom claim `role = "operator"`. Token tidak ada atau tidak sah → 401 `UNAUTHENTICATED`; tanpa peran operator → 403 `FORBIDDEN`. Endpoint `public` tanpa header. (UI mode mock masih memakai login demo.)',
+      '`operator` endpoints require `Authorization: Bearer <Firebase ID token>` with custom claim `role = "operator"`. Missing or invalid token → 401 `UNAUTHENTICATED`; no operator role → 403 `FORBIDDEN`. `public` endpoints need no header. (The mock-mode UI still uses a demo login.)',
     ),
   },
   {
@@ -122,7 +122,7 @@ const AS_OF_PARAM: Field = {
 
 export const SCHEMAS: Schema[] = [
   {
-    name: 'Health', origin: 'fe',
+    name: 'Health', origin: 'backend',
     desc: t('Cek hidup layanan.', 'Liveness check.'),
     fields: [
       { name: 'status', type: "'ok'", req: true, desc: t('Selalu "ok" bila layanan hidup.', 'Always "ok" when the service is up.') },
@@ -131,7 +131,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'Meta', origin: 'fe',
+    name: 'Meta', origin: 'backend',
     desc: t('Keadaan data terakhir; mengisi banner dan pita malam di peta.', 'Latest data state; fills the banner and night ribbon on the map.'),
     fields: [
       { name: 'as_of', type: ISO, req: true, desc: t('Waktu acuan. Produksi = sekarang; replay = waktu yang diputar.', 'Reference time. Production = now; replay = replayed time.') },
@@ -145,7 +145,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'SatState', origin: 'fe',
+    name: 'SatState', origin: 'backend',
     desc: t('Ketersediaan satu satelit.', 'Availability of one satellite.'),
     fields: [
       { name: 'last_slot', type: `${ISO} | null`, req: true, desc: t('Slot terakhir yang filenya ada di bucket. null = belum ada malam ini.', 'Latest slot whose file is in the bucket. null = none tonight.') },
@@ -161,12 +161,12 @@ export const SCHEMAS: Schema[] = [
       { name: 'properties.status', type: STATUS_T, req: true, desc: t('Status rule engine pada last_slot.', 'Rule-engine status at last_slot.') },
       { name: 'properties.utility', type: 'number 0–1 | null', req: true, desc: t('U; null bila NO_OBSERVATION.', 'U; null when NO_OBSERVATION.') },
       { name: 'properties.n_sat', type: '0 | 1 | 2', req: true, desc: t('Satelit cerah untuk piksel ini.', 'Clear-sky satellites for this pixel.') },
-      { name: 'properties.cluster_id', type: 'string | null', req: true, origin: 'fe', desc: t('ID kelompok AWAS aktif bila piksel anggota; UI menggambar garis kelompok dari sini.', 'Active AWAS cluster id if the pixel is a member; the UI draws cluster outlines from it.') },
-      { name: 'properties.province', type: PROV_T, req: true, origin: 'fe', desc: t('Kode BPS provinsi; dipakai filter provinsi.', 'BPS province code; used by the province filter.') },
+      { name: 'properties.cluster_id', type: 'string | null', req: true, desc: t('ID kelompok AWAS aktif bila piksel anggota; UI menggambar garis kelompok dari sini.', 'Active AWAS cluster id if the pixel is a member; the UI draws cluster outlines from it.') },
+      { name: 'properties.province', type: PROV_T, req: true, desc: t('Kode BPS provinsi; dipakai filter provinsi.', 'BPS province code; used by the province filter.') },
     ],
   },
   {
-    name: 'PixelIndex', origin: 'fe',
+    name: 'PixelIndex', origin: 'backend',
     desc: t('Daftar piksel gambut statis, diunduh sekali per versi (cache lewat ETag). Urutannya = indeks sel di GridCompact dan NightCompact. Per 10 ribu sel ≈ 120 KB mentah, jauh lebih kecil setelah gzip.', 'Static peat pixel list, downloaded once per version (cache via ETag). Its order = the cell index in GridCompact and NightCompact. Per 10k cells ≈ 120 KB raw, far smaller once gzipped.'),
     fields: [
       { name: 'version', type: 'string', req: true, desc: t('Berubah hanya bila peat mask dibangun ulang (asapify-build).', 'Changes only when the peat mask is rebuilt (asapify-build).') },
@@ -178,7 +178,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'GridCompact', origin: 'fe',
+    name: 'GridCompact', origin: 'backend',
     desc: t('Status semua sel pada satu slot dalam bentuk ringkas; dipakai peta. Diukur untuk 10 ribu sel: ≈ 23 KB mentah / 11 KB gzip, vs GeoJSON ≈ 1,9 MB mentah / 83 KB gzip, dan jauh lebih ringan di-parse di HP.', 'Status of every cell at one slot, compact; used by the map. Measured for 10k cells: ≈ 23 KB raw / 11 KB gzip, vs GeoJSON ≈ 1.9 MB raw / 83 KB gzip, and far lighter to parse on phones.'),
     fields: [
       { name: 'pixels_version', type: 'string', req: true, desc: t('Harus sama dengan PixelIndex.version; bila beda, UI mengunduh ulang indeks.', 'Must equal PixelIndex.version; if not, the UI re-downloads the index.') },
@@ -190,7 +190,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'NightCompact', origin: 'fe',
+    name: 'NightCompact', origin: 'backend',
     desc: t('Status per slot untuk satu malam; satu permintaan untuk pemutar slot (54 string status, ±530 KB mentah untuk 10 ribu sel). Gzip sangat efektif karena status jarang berubah antar slot.', 'Status per slot for one night; one request for the slot player (54 status strings, ≈ 530 KB raw for 10k cells). Gzip is very effective because status rarely changes between slots.'),
     fields: [
       { name: 'pixels_version', type: 'string', req: true, desc: t('Sama seperti GridCompact.', 'Same as GridCompact.') },
@@ -202,7 +202,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'NightSummary', origin: 'fe',
+    name: 'NightSummary', origin: 'backend',
     desc: t('Ringkasan satu malam untuk kalender di pemutar slot.', 'Summary of one night for the calendar in the slot player.'),
     fields: [
       { name: 'night', type: 'string · YYYY-MM-DD', req: true, desc: t('night_id.', 'night_id.') },
@@ -211,7 +211,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'Basemap', origin: 'fe',
+    name: 'Basemap', origin: 'backend',
     desc: t('Satu pilihan peta dasar raster dari BE (mis. citra satelit). Peta jalan dan polos disediakan FE.', 'One raster basemap option from the BE (e.g. satellite imagery). Street and plain maps are provided by the FE.'),
     fields: [
       { name: 'id', type: 'string', req: true, desc: t('ID unik, mis. `viirs`.', 'Unique id, e.g. `viirs`.') },
@@ -224,7 +224,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'ProvinceBoundary', origin: 'fe',
+    name: 'ProvinceBoundary', origin: 'backend',
     desc: t('Berkas statis `layers/provinces.geojson` di bucket publik (bukan endpoint API): 15 provinsi Sumatra + Kalimantan, disederhanakan ±90 KB (±30 KB gzip). Sumber geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).', 'Static file `layers/provinces.geojson` in the public bucket (not an API endpoint): the 15 Sumatra + Kalimantan provinces, simplified ≈ 90 KB (≈ 30 KB gzip). Source geoBoundaries IDN ADM1 (ODbL, © OpenStreetMap contributors).'),
     fields: [
       { name: 'features[].properties.code', type: PROV_T, req: true, desc: t('Kode BPS provinsi.', 'BPS province code.') },
@@ -261,7 +261,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'Decision', origin: 'fe',
+    name: 'Decision', origin: 'backend',
     desc: t('Keputusan operator atas satu kelompok (sekali per kelompok).', 'Operator decision on one cluster (once per cluster).'),
     fields: [
       { name: 'action', type: "'publish' | 'reject'", req: true, desc: t('Terbitkan ke grup peringatan atau tolak.', 'Publish to the alert group or reject.') },
@@ -277,9 +277,9 @@ export const SCHEMAS: Schema[] = [
     fields: [
       { name: '…ClusterSummary', type: '—', req: true, desc: t('Semua field ClusterSummary.', 'All ClusterSummary fields.') },
       { name: 'attributes', type: 'Record<u_H|u_G|u_LST|u_SAT|u_T, number | null>', req: true, desc: t('Atribut MAUT di trigger_slot; null = tidak tersedia (mis. satelit berawan). u_N = neighbour_support.', 'MAUT attributes at trigger_slot; null = not available (e.g. cloudy satellite). u_N = neighbour_support.') },
-      { name: 'attribute_details', type: 'Record<u_H|u_G|u_LST|u_SAT|u_T|u_N, AttrDetail>', req: false, origin: 'fe', desc: t('Angka terukur di balik tiap u (mis. anomali B07−B14 dalam K) untuk tabel atribut. Tanpa ini tabel hanya menampilkan u dan bobot.', 'Measured numbers behind each u (e.g. the B07−B14 anomaly in K) for the attribute table. Without it the table shows only u and the weight.') },
+      { name: 'attribute_details', type: 'Record<u_H|u_G|u_LST|u_SAT|u_T|u_N, AttrDetail>', req: false, desc: t('Angka terukur di balik tiap u (mis. anomali B07−B14 dalam K) untuk tabel atribut. Tanpa ini tabel hanya menampilkan u dan bobot.', 'Measured numbers behind each u (e.g. the B07−B14 anomaly in K) for the attribute table. Without it the table shows only u and the weight.') },
       { name: 'series', type: 'SeriesPoint[]', req: true, desc: t('Semua slot 3 malam valid terakhir untuk rep_pixel, urut waktu.', 'Every slot of the last 3 valid nights for rep_pixel, in time order.') },
-      { name: 'neighbours', type: 'Neighbour[8]', req: true, origin: 'fe', desc: t('8 tetangga rep_pixel untuk mini-grid 3 × 3.', 'The 8 neighbours of rep_pixel for the 3 × 3 mini grid.') },
+      { name: 'neighbours', type: 'Neighbour[8]', req: true, desc: t('8 tetangga rep_pixel untuk mini-grid 3 × 3.', 'The 8 neighbours of rep_pixel for the 3 × 3 mini grid.') },
       { name: 'verification', type: 'VerificationDetail | null', req: true, desc: t('Hasil agen lengkap.', 'Full agent result.') },
     ],
   },
@@ -288,12 +288,12 @@ export const SCHEMAS: Schema[] = [
     desc: t('Satu slot di grafik utility.', 'One slot on the utility chart.'),
     fields: [
       { name: 'slot', type: ISO, req: true, desc: t('Slot 10 menit, 13.00–20.50 UTC.', '10-minute slot, 13:00–20:50 UTC.') },
-      { name: 'U', type: 'number 0–1 | null', req: true, origin: 'fe', desc: t('null = NO_OBSERVATION (diarsir di grafik).', 'null = NO_OBSERVATION (hatched on the chart).') },
+      { name: 'U', type: 'number 0–1 | null', req: true, desc: t('null = NO_OBSERVATION (diarsir di grafik).', 'null = NO_OBSERVATION (hatched on the chart).') },
       { name: 'status', type: STATUS_T, req: true, desc: t('Status slot itu.', 'Status at that slot.') },
     ],
   },
   {
-    name: 'AttrDetail', origin: 'fe',
+    name: 'AttrDetail', origin: 'backend',
     desc: t('Angka terukur di balik satu atribut u. u = clamp((value − scale[0]) ÷ (scale[1] − scale[0]), 0, 1); backend yang menentukan skalanya.', 'The measured number behind one attribute u. u = clamp((value − scale[0]) ÷ (scale[1] − scale[0]), 0, 1); the backend owns the scale.'),
     fields: [
       { name: 'value', type: 'number | null', req: true, desc: t('Angka yang dinormalisasi. null = atribut tidak tersedia. u_H/u_G: anomali (panas − acuan) piksel perwakilan terhadap median crop, K. u_LST/u_SAT: selisih LST satelit dengan acuan TS/T2M NASA POWER, K. u_T: jumlah malam yang anomali (U puncak malam itu ≥ 0,30 = ambang Pantau). u_N: jumlah tetangga U0 ≥ 0,5.', 'The normalised number. null = attribute unavailable. u_H/u_G: anomaly (hot − reference) of the representative pixel against the crop median, K. u_LST/u_SAT: satellite LST minus the NASA POWER TS/T2M reference, K. u_T: number of anomalous nights (peak U of that night ≥ 0.30, the Watch threshold). u_N: number of neighbours with U0 ≥ 0.5.') },
@@ -303,7 +303,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'AttrPart', origin: 'fe',
+    name: 'AttrPart', origin: 'backend',
     desc: t('Satu angka pendukung pada AttrDetail.', 'One supporting number in an AttrDetail.'),
     fields: [
       { name: 'key', type: 'string', req: true, desc: t('b07 | b14 | sw038 | ir105 (suhu kecerahan di piksel perwakilan), dt (panas − acuan), bg_dt dan sigma (median dan simpangan latar crop), lst, ts, t2m, night_peak (U puncak satu malam). Kunci tak dikenal diabaikan.', 'b07 | b14 | sw038 | ir105 (brightness temperature at the representative pixel), dt (hot − reference), bg_dt and sigma (crop background median and spread), lst, ts, t2m, night_peak (peak U of one night). Unknown keys are ignored.') },
@@ -314,7 +314,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'Neighbour', origin: 'fe',
+    name: 'Neighbour', origin: 'backend',
     desc: t('Satu sel tetangga.', 'One neighbour cell.'),
     fields: [
       { name: 'dir', type: "'nw'|'n'|'ne'|'w'|'e'|'sw'|'s'|'se'", req: true, desc: t('Arah dari rep_pixel.', 'Direction from rep_pixel.') },
@@ -331,9 +331,9 @@ export const SCHEMAS: Schema[] = [
       { name: 'evidence', type: 'Evidence[] (≥ 1)', req: true, desc: t('Bukti dengan waktu dan umur.', 'Evidence with time and age.') },
       { name: 'summary_id', type: 'string ≤ 500', req: true, desc: t('Ringkasan Bahasa Indonesia.', 'Indonesian summary.') },
       { name: 'summary_en', type: 'string ≤ 500', req: true, desc: t('Ringkasan Inggris (untuk juri).', 'English summary (for judges).') },
-      { name: 'tool_trace', type: 'ToolCall[]', req: true, origin: 'fe', desc: t('Urutan tool agen; tampil di ToolTrace dan video.', 'Agent tool sequence; shown in ToolTrace and the video.') },
-      { name: 'images', type: 'EvidenceImg[]', req: true, origin: 'fe', desc: t('Citra VIIRS + Himawari berdampingan.', 'VIIRS + Himawari images side by side.') },
-      { name: 'viirs', type: 'ViirsDetection[]', req: true, origin: 'fe', desc: t('Deteksi VIIRS ≤ 10 km, 48 jam, urut jarak.', 'VIIRS detections ≤ 10 km, 48 h, by distance.') },
+      { name: 'tool_trace', type: 'ToolCall[]', req: true, desc: t('Urutan tool agen; tampil di ToolTrace dan video.', 'Agent tool sequence; shown in ToolTrace and the video.') },
+      { name: 'images', type: 'EvidenceImg[]', req: true, desc: t('Citra VIIRS + Himawari berdampingan.', 'VIIRS + Himawari images side by side.') },
+      { name: 'viirs', type: 'ViirsDetection[]', req: true, desc: t('Deteksi VIIRS ≤ 10 km, 48 jam, urut jarak.', 'VIIRS detections ≤ 10 km, 48 h, by distance.') },
     ],
   },
   {
@@ -348,7 +348,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'ToolCall', origin: 'fe',
+    name: 'ToolCall', origin: 'backend',
     desc: t('Satu panggilan tool agen.', 'One agent tool call.'),
     fields: [
       { name: 'tool', type: 'string', req: true, desc: t('get_pixel_context, get_latest_viirs, fetch_viirs_image, fetch_himawari_image, save_verification.', 'get_pixel_context, get_latest_viirs, fetch_viirs_image, fetch_himawari_image, save_verification.') },
@@ -358,7 +358,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'EvidenceImg', origin: 'fe',
+    name: 'EvidenceImg', origin: 'backend',
     desc: t('Citra crop ±0,2° di sekitar centroid.', '±0.2° crop around the centroid.'),
     fields: [
       { name: 'source', type: "'viirs_image' | 'himawari_image'", req: true, desc: t('Jenis citra.', 'Image kind.') },
@@ -372,7 +372,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'ThermalCrop', origin: 'fe',
+    name: 'ThermalCrop', origin: 'backend',
     desc: t('Suhu kecerahan per sel di balik citra termal. Sel = piksel 0,02° ASAPify (≈ 2 km, setara piksel asli satelit), jadi crop ±0,2° berisi 20 × 20 sel dan bbox jatuh di garis grid. PNG citra himawari_image harus memakai skala warna tetap kanal panas: 270 K #d8dee4, 282 K #8f9aa5, 290 K #3c434b, 298 K #262b31, 304 K #5b2a1d, 310 K #a8380f, 316 K #ff6a00, 324 K #ffb347, 332 K #fff1bf, 340 K #ffffff (interpolasi linear, tanpa peregangan per crop); legenda dan swatch tooltip UI memakai skala yang sama.', 'Brightness temperature per cell behind the thermal image. A cell is a 0.02° ASAPify pixel (≈ 2 km, comparable to a native satellite pixel), so a ±0.2° crop holds 20 × 20 cells and the bbox lies on grid lines. The himawari_image PNG must use this fixed hot-channel colour scale: 270 K #d8dee4, 282 K #8f9aa5, 290 K #3c434b, 298 K #262b31, 304 K #5b2a1d, 310 K #a8380f, 316 K #ff6a00, 324 K #ffb347, 332 K #fff1bf, 340 K #ffffff (linear interpolation, no per-crop stretching); the UI legend and tooltip swatch use the same scale.'),
     fields: [
       { name: 'bbox', type: '[lon_w, lat_s, lon_e, lat_n]', req: true, desc: t('Sama dengan EvidenceImg.bbox. Sel (0, 0) di pojok barat laut.', 'Same as EvidenceImg.bbox. Cell (0, 0) is the north-west corner.') },
@@ -382,7 +382,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'ThermalBand', origin: 'fe',
+    name: 'ThermalBand', origin: 'backend',
     desc: t('Satu kanal pada ThermalCrop.', 'One channel in a ThermalCrop.'),
     fields: [
       { name: 'sat', type: "'himawari' | 'gk2a'", req: true, desc: t('Satelit asal.', 'Source satellite.') },
@@ -392,7 +392,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'ViirsDetection', origin: 'fe',
+    name: 'ViirsDetection', origin: 'backend',
     desc: t('Satu titik FIRMS dari get_latest_viirs.', 'One FIRMS point from get_latest_viirs.'),
     fields: [
       { name: 'src', type: 'string', req: true, desc: t('mis. VIIRS_NOAA20_NRT / _SP.', 'e.g. VIIRS_NOAA20_NRT / _SP.') },
@@ -414,8 +414,8 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'DecisionResponse', origin: 'fe',
-    desc: t('Decision yang tersimpan + hasil kirim Telegram. Menggantikan `published_by/published_at` di contoh backend.html supaya sama dengan field `decision` di detail.', 'Saved Decision + Telegram send result. Replaces `published_by/published_at` from the backend.html example so it matches the `decision` field in the detail.'),
+    name: 'DecisionResponse', origin: 'backend',
+    desc: t('Decision yang tersimpan + hasil kirim Telegram; bentuknya sama dengan field `decision` di detail.', 'Saved Decision + Telegram send result; same shape as the `decision` field in the detail.'),
     fields: [
       { name: '…Decision', type: '—', req: true, desc: t('Semua field Decision.', 'All Decision fields.') },
       { name: 'telegram', type: "{status: 'sent'|'failed', message_id: number|null} | null", req: true, desc: t('null untuk reject. Gagal kirim tetap 201; keputusan tersimpan.', 'null for reject. A failed send is still 201; the decision is saved.') },
@@ -429,7 +429,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'VerifyResponse', origin: 'fe',
+    name: 'VerifyResponse', origin: 'backend',
     desc: t('Permintaan diteruskan ke asapify-agent (asinkron).', 'Request forwarded to asapify-agent (asynchronous).'),
     fields: [
       { name: 'verification_id', type: 'string', req: true, desc: t('ID verifikasi yang akan dibuat agen.', 'Id of the verification the agent will create.') },
@@ -438,7 +438,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'Alert', origin: 'fe',
+    name: 'Alert', origin: 'backend',
     desc: t('Peringatan yang sudah diterbitkan ke grup Telegram.', 'Alert published to the Telegram group.'),
     fields: [
       { name: 'id', type: 'string', req: true, desc: t('`A-{MMDD}-{nnn}`.', '`A-{MMDD}-{nnn}`.') },
@@ -454,7 +454,7 @@ export const SCHEMAS: Schema[] = [
     ],
   },
   {
-    name: 'CloseRequest', origin: 'fe',
+    name: 'CloseRequest', origin: 'backend',
     desc: t('Tutup peringatan lebih awal.', 'Close an alert early.'),
     fields: [
       { name: 'reason', type: 'string | null', req: false, desc: t('Catatan untuk audit_log.', 'Note for audit_log.') },
@@ -510,8 +510,8 @@ export const ENDPOINTS: Endpoint[] = [
     usedBy: t('Peta (format=compact) → warna + ikon status, garis kelompok, inspektur, keadaan "tertutup awan" (> 50% N).', 'Map (format=compact) → status colours + icons, cluster outlines, inspector, "cloud covered" state (> 50% N).'),
     params: [
       AS_OF_PARAM,
-      { name: 'format', type: "query · 'geojson' | 'compact'", req: false, origin: 'fe', desc: t('Default geojson. UI selalu mengirim compact.', 'Default geojson. The UI always sends compact.') },
-      { name: 'province', type: `query · ${PROV_T}`, req: false, origin: 'fe', desc: t('Hanya untuk geojson (opsional); UI memfilter di klien.', 'geojson only (optional); the UI filters client-side.') },
+      { name: 'format', type: "query · 'geojson' | 'compact'", req: false, desc: t('Default geojson. UI selalu mengirim compact.', 'Default geojson. The UI always sends compact.') },
+      { name: 'province', type: `query · ${PROV_T}`, req: false, desc: t('Hanya untuk geojson (opsional); UI memfilter di klien.', 'geojson only (optional); the UI filters client-side.') },
     ],
     responses: [
       { code: 200, schema: 'GridCompact', example: 'gridCompact', note: t('format=compact. String panjang dipotong di contoh.', 'format=compact. Long strings are trimmed in the example.') },
@@ -525,7 +525,7 @@ export const ENDPOINTS: Endpoint[] = [
     purpose: t('54 string status (format ringkas) untuk satu malam; satu permintaan menggantikan 54 × /operator/grid. Slot setelah as_of = null.', '54 status strings (compact format) for one night; one request replaces 54 × /operator/grid. Slots after as_of = null.'),
     usedBy: t('Peta → pemutar slot (pita malam: baris ▲ jumlah AWAS per slot), pemilih malam arsip (status + garis kelompok malam itu), riwayat 54 slot di inspektur piksel.', 'Map → slot player (night ribbon: ▲ row = AWAS count per slot), archive night picker (status + that night\'s cluster outlines), 54-slot history in the pixel inspector.'),
     params: [
-      { name: 'night', type: 'query · YYYY-MM-DD', req: true, origin: 'fe', desc: t('night_id (tanggal WIB malam dimulai), dalam rentang Meta.nights. Di luar rentang → VALIDATION.', 'night_id (WIB date the night starts), within Meta.nights. Outside the range → VALIDATION.') },
+      { name: 'night', type: 'query · YYYY-MM-DD', req: true, desc: t('night_id (tanggal WIB malam dimulai), dalam rentang Meta.nights. Di luar rentang → VALIDATION.', 'night_id (WIB date the night starts), within Meta.nights. Outside the range → VALIDATION.') },
       AS_OF_PARAM,
     ],
     responses: [{ code: 200, schema: 'NightCompact', example: 'night', note: t('Contoh dipotong. Malam tanpa data: semua slot null dan `clusters` kosong.', 'Example trimmed. A night without data: every slot is null and `clusters` is empty.') }],
@@ -537,7 +537,7 @@ export const ENDPOINTS: Endpoint[] = [
     purpose: t('Satu baris per malam arsip dalam bulan itu: ada data atau tidak, dan jumlah kelompok AWAS. Malam di luar Meta.nights tidak dikirim.', 'One row per archive night in that month: whether it has data and how many AWAS clusters it had. Nights outside Meta.nights are not sent.'),
     usedBy: t('Peta → kalender di pemutar slot (tanggal pudar = tanpa data, titik = ada kelompok AWAS).', 'Map → calendar in the slot player (faded date = no data, dot = AWAS clusters).'),
     params: [
-      { name: 'month', type: 'query · YYYY-MM', req: true, origin: 'fe', desc: t('Bulan yang ditampilkan kalender.', 'Month shown by the calendar.') },
+      { name: 'month', type: 'query · YYYY-MM', req: true, desc: t('Bulan yang ditampilkan kalender.', 'Month shown by the calendar.') },
     ],
     responses: [{ code: 200, schema: 'NightSummary', example: 'nights', note: t('NightSummary[], urut tanggal. Contoh dipotong.', 'NightSummary[], in date order. Example trimmed.') }],
     errors: ['UNAUTHENTICATED', 'FORBIDDEN', 'VALIDATION'],
@@ -554,7 +554,7 @@ export const ENDPOINTS: Endpoint[] = [
   {
     id: 'clusters', method: 'GET', path: '/operator/clusters', auth: 'operator',
     title: t('Daftar kelompok AWAS', 'AWAS cluster list'),
-    purpose: t('Kelompok AWAS + verifikasi terakhir + keputusan. Respons berupa array langsung (usulan FE).', 'AWAS clusters + latest verification + decision. The response is a bare array (FE proposal).'),
+    purpose: t('Kelompok AWAS + verifikasi terakhir + keputusan. Respons berupa array langsung.', 'AWAS clusters + latest verification + decision. The response is a bare array.'),
     usedBy: t('Peta → panel daftar kelompok (UI mengurutkan menurut utility atau trigger_slot), keadaan "kosong".', 'Map → cluster list panel (the UI sorts by utility or trigger_slot), "empty" state.'),
     params: [
       { name: 'state', type: "query · 'active' | 'closed'", req: false, origin: 'backend', desc: t('Default active. UI memakai active untuk malam terbaru.', 'Default active. The UI uses active for the latest night.') },

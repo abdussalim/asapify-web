@@ -7,6 +7,9 @@ import {
 } from '../contract/spec';
 
 const SCHEMA_NAMES = new Set(SCHEMAS.map((s) => s.name));
+// Legenda usulan FE hanya tampil bila masih ada item yang belum masuk backend.html.
+const HAS_FE = SCHEMAS.some((s) => s.origin === 'fe' || s.fields.some((f) => f.origin === 'fe'))
+  || ENDPOINTS.some((e) => e.params?.some((p) => p.origin === 'fe'));
 const BASE = '/api/v1';
 
 /** `kode` di teks spesifikasi → <code>. */
@@ -172,7 +175,7 @@ export function KontrakApi() {
         <p className="lede">{t('api.lede')}</p>
         <div className="legend-tags">
           <span><span className="tag">backend.html</span> {t('api.legend_backend')}</span>
-          <span><span className="tag fe">{t('api.fe_tag')}</span> {t('api.legend_fe')}</span>
+          {HAS_FE && <span><span className="tag fe">{t('api.fe_tag')}</span> {t('api.legend_fe')}</span>}
           <span className="muted">{t('api.count', { e: ENDPOINTS.length, s: SCHEMAS.length })}</span>
         </div>
       </header>

@@ -5,6 +5,7 @@ detail kelompok `AWAS` (atribut MAUT, tetangga, verifikasi agen), dan keputusan 
 
 - Spesifikasi UI: `../asapify/ui.html` · kontrak API: `../asapify/backend.html` bagian 03–05
 - Konsep dan aturan sistem: `../ASAPify_Pitch_Google_AI_Builder_2026/WORKLOG.md` bagian 7–10
+- Bahasa default Inggris; Indonesia lewat tombol ID/EN di bilah atas (pilihan disimpan per perangkat)
 
 ## Menjalankan
 
@@ -24,6 +25,9 @@ Salin `.env.example` ke `.env` bila perlu mengganti mode:
 | `VITE_PROVINCES_LAYER_URL` | URL GeoJSON | Layer batas provinsi di bucket publik (mode live) |
 
 ## Deploy (GitHub → Vercel)
+
+Vercel hanya untuk pratinjau mode mock. URL prototipe yang dinilai ada di Firebase Hosting dalam mode live
+(`../asapify/cloud.html` bagian 11).
 
 1. Buat repo kosong di GitHub, lalu dari folder ini:
    `git remote add origin <url-repo>` → `git push -u origin main`.
@@ -61,7 +65,7 @@ Buka tab **Kontrak API** di aplikasi (`/kontrak-api`, publik, ID/EN). Isinya: ko
 galat, layar UI yang memakainya), skema, file statis di bucket, dan endpoint internal `asapify-agent`.
 Contoh JSON diambil dari fixture mock yang sama dengan UI, jadi tidak bisa berbeda dari tampilan.
 
-Peta memakai **format ringkas** (usulan FE): `GET /operator/pixels` sekali (geometri grid, di-cache),
+Peta memakai **format ringkas**: `GET /operator/pixels` sekali (geometri grid, di-cache),
 lalu `GET /operator/grid?format=compact` dan `GET /operator/grid/night` (54 slot dalam satu permintaan
 untuk pemutar). Diukur untuk 10 ribu piksel per slot: ringkas ≈ 23 KB mentah / 11 KB gzip, GeoJSON ≈ 1,9 MB
 mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk alat lain.
@@ -79,8 +83,8 @@ mentah / 83 KB gzip. GeoJSON tetap tersedia (`format=geojson`, default) untuk al
   dengan garis batas tebal, labelnya, dan bayangan di luar provinsi.
 - Label peta (nama provinsi, label peta dasar OpenFreeMap, tombol MapLibre) mengikuti bahasa UI.
 
-Sumber datanya `src/contract/spec.ts` (tipe TypeScript tetap di `src/types.ts`). Field bertanda
-**usulan FE** belum ada di `backend.html` dan perlu disepakati tim BE.
+Sumber datanya `src/contract/spec.ts` (tipe TypeScript tetap di `src/types.ts`). Semua endpoint
+dan field di kontrak sudah tercantum di `backend.html` (disamakan 6 Okt 2026).
 
 ## Detail kelompok: suhu terukur
 
@@ -96,7 +100,7 @@ Halaman `/kelompok/:id` menampilkan angka, bukan hanya bobot:
   sumbangan w × u, angka pendukung (suhu tiap kanal, latar, σ, LST/TS/T2M, U puncak per malam), skala normalisasi, dan
   rumus `U = Σ w·u ÷ Σ w` dengan angkanya. Sorot batang u untuk melihat rumus normalisasinya.
 - **Data.** `EvidenceImg.thermal` (grid `ThermalCrop`, 4 kanal × 20 × 20 sel) dan `ClusterDetail.attribute_details` adalah
-  **usulan FE** yang belum ada di `backend.html`; keduanya opsional (tanpa itu citra tampil tanpa tooltip dan tabel hanya
+  bagian kontrak resmi (`backend.html`); keduanya opsional (tanpa itu citra tampil tanpa tooltip dan tabel hanya
   berisi u dan bobot; `u_N` tetap dihitung dari tetangga, dan `EvidenceImg.bbox` yang hilang dianggap ±0,2° dari
   koordinat kelompok). Skema ada di tab Kontrak API. Mode mock membangun citra, tooltip, dan tabel dari satu grid suhu
   fiktif, jadi angkanya selalu sepakat dan terhubung ke `u` di fixture (`src/mock/thermal.ts`).

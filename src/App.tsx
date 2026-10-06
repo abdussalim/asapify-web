@@ -62,11 +62,11 @@ function TopBar({ theme }: { theme: ReturnType<typeof useTheme> }) {
         </nav>
         <div className="tools">
           <div className="seg" role="group" aria-label={t('lang.switch')}>
-            <button aria-pressed={lang === 'id'} onClick={() => setLang('id')}>
-              {lang === 'id' && <m.i className="pill-bg seg-bg" layoutId="seg-pill" transition={spring} />}<span>ID</span>
-            </button>
             <button aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
               {lang === 'en' && <m.i className="pill-bg seg-bg" layoutId="seg-pill" transition={spring} />}<span>EN</span>
+            </button>
+            <button aria-pressed={lang === 'id'} onClick={() => setLang('id')}>
+              {lang === 'id' && <m.i className="pill-bg seg-bg" layoutId="seg-pill" transition={spring} />}<span>ID</span>
             </button>
           </div>
           <button className="icon-btn" onClick={theme.cycle} title={t(`theme.${theme.pref}`)} aria-label={t(`theme.${theme.pref}`)}>
